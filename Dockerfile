@@ -4,7 +4,7 @@
 #   Updates the base Python image with security patches and common system
 #   packages. This image becomes the base of all other images.
 # dependencies-image
-#   Installs third-party dependencies (requirements/main.in) into a virtual
+#   Installs third-party dependencies (requirements/main.txt) into a virtual
 #   environment. This virtual environment is ideal for copying across build
 #   stages.
 # install-image
@@ -35,7 +35,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip install --upgrade --no-cache-dir pip setuptools wheel
 
 # Install the app's Python runtime dependencies
-COPY requirements/main.in ./requirements.txt
+COPY requirements/main.txt ./requirements.txt
 RUN pip install --quiet --no-cache-dir -r requirements.txt
 
 FROM dependencies-image AS install-image

@@ -10,7 +10,7 @@
 -c main.txt
 
 asgi-lifespan
-coverage[toml]
+coverage
 httpx
 mypy
 pre-commit

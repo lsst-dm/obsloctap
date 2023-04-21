@@ -11,10 +11,9 @@ from obsloctap.config import config
 @pytest.mark.asyncio
 async def test_get_index(client: AsyncClient) -> None:
     """Test ``GET /obsloctap/``"""
-    response = await client.get("/obsloctap/")
+    response = await client.get("/")
     assert response.status_code == 200
-    data = response.json()
-    metadata = data["metadata"]
+    metadata = response.json()
     assert metadata["name"] == config.name
     assert isinstance(metadata["version"], str)
     assert isinstance(metadata["description"], str)

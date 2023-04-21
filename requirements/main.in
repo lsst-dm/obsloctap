@@ -10,7 +10,7 @@
 # These dependencies are for fastapi including some optional features.
 fastapi
 starlette
-uvicorn[standard]
+uvicorn
 
 # Other dependencies.
 safir>=3.4.0

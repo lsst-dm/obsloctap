@@ -19,3 +19,11 @@ async def test_get_index(client: AsyncClient) -> None:
     assert isinstance(data["description"], str)
     assert isinstance(data["repository_url"], str)
     assert isinstance(data["documentation_url"], str)
+
+
+@pytest.mark.asyncio
+async def test_get_schedule(client: AsyncClient) -> None:
+    response = await client.get("/schedule/")
+    assert response.status_code == 200
+    data = response.json()
+    print(data)

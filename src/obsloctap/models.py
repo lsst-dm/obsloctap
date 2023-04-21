@@ -18,3 +18,13 @@ class Index(BaseModel):
     """
 
     metadata: SafirMetadata = Field(..., title="Package metadata")
+
+
+class Observation(BaseModel):
+    """Single schedule observation"""
+
+    mjd: str
+    ra: float
+    dec: float
+    rotSkyPos: float
+    nexp: int

@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 from safir.metadata import Metadata as SafirMetadata
 
-__all__ = ["Index"]
+__all__ = ["Index", "Observation"]
 
 
 class Index(BaseModel):

@@ -17,7 +17,6 @@ from safir.middleware.x_forwarded import XForwardedMiddleware
 from .config import config
 from .handlers.external import external_router
 from .handlers.internal import internal_router
-from .models import Observation
 
 __all__ = ["app", "config"]
 
@@ -41,7 +40,7 @@ app = FastAPI(
 
 # Attach the routers.
 app.include_router(internal_router)
-app.include_router(external_router, prefix=f"/{config.path_prefix}")
+app.include_router(external_router, prefix=config.path_prefix)
 
 # Add middleware.
 app.add_middleware(XForwardedMiddleware)
@@ -50,17 +49,3 @@ app.add_middleware(XForwardedMiddleware)
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     await http_client_dependency.aclose()
-
-
-@app.get("/schedule/", response_model=list[Observation])
-async def get_schedule() -> any:
-    observations = []
-    obs = Observation(
-        mjd=60032.194918981484,
-        ra=90.90909091666666,
-        dec=-74.60384434722222,
-        rotSkyPos=18.33895879413964,
-        nexp=3,
-    )
-    observations.append(obs)
-    return observations

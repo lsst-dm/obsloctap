@@ -6,6 +6,7 @@ from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
 
 from ..config import config
+from ..efd import EfdHelp
 from ..models import Index, Observation
 
 __all__ = ["get_index", "external_router"]
@@ -46,19 +47,10 @@ async def get_index(
 
 @external_router.get(
     "/schedule",
-    description=("Return the curent observing schedule."),
+    description="Return the curent observing schedule.",
     response_model=list[Observation],
     response_model_exclude_none=True,
     summary="Observation Schedule",
 )
 async def get_schedule() -> list[Observation]:
-    observations = []
-    obs = Observation(
-        mjd="60032.194918981484",
-        ra=90.90909091666666,
-        dec=-74.60384434722222,
-        rotSkyPos=18.33895879413964,
-        nexp=3,
-    )
-    observations.append(obs)
-    return observations
+    return EfdHelp.getHelper().get_schedule()

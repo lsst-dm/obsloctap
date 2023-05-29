@@ -46,6 +46,11 @@ app.include_router(external_router, prefix=config.path_prefix)
 app.add_middleware(XForwardedMiddleware)
 
 
+@app.on_event("startup")
+async def startup_event() -> None:
+    pass
+
+
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     await http_client_dependency.aclose()

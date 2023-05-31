@@ -1,11 +1,12 @@
 """Helper for the efd -so it may be mocked in test."""
 
-__all__ = ["EfdHelp", "MockEfdHelp"]
+__all__ = ["EfdHelp", "EfdHelpProvider"]
 
 import logging
 import os
 
 from lsst_efd_client import EfdClient
+from pandas import DataFrame
 
 from obsloctap.models import Observation
 
@@ -24,51 +25,43 @@ else:
 
 
 class EfdHelp:
-    efd_helper = None
-
-    def __init__(self, client):
+    def __init__(self, client: EfdClient) -> None:
         """
-        Setup with the efd influx client passed in
-        :type client: EfdClient.influx_client
+        Setup helper with the efd influx client passed in.
+
+        Parameters
+        ----------
+        client : EfdClient
+
+        :return: None
         """
         self.client = client
 
-    @staticmethod
-    def getHelper():
-        """
-        return the helper
-        """
-        if EfdHelp.efd_helper is None:
-            if "EFD" in os.environ:
-                efd = os.environ["EFD"]
-                client = EfdClient(efd_name=efd)
-                client.output = "dataframe"
-                EfdHelp.efd_helper = EfdHelp(client=client.influx_client)
-            else:
-                EfdHelp.efd_helper = MockEfdHelp(None)
-                logging.warning("Using MOCK EFD - EFD env not set.")
-        return EfdHelp.efd_helper
-
-    def processObsQuery(self, result) -> list[Observation]:
+    def processObsQuery(self, result: DataFrame) -> list[Observation]:
         """
         Process the result of the influx query.
         The observations are returned in one record with
         fields packed in arrays.
+        This turns them into a list of Observations
 
-        :type result: Dataframe
-        :return: List of Observations
+        :type self: EfdHelp
+        :type result: DataFrame
+        :return: list[Observation]
         """
         obslist = list[Observation]()
         for t in range(0, result.numberOfTargets[0]):
-            obs = Observation()
-            obs.mjd = result[f"mjd{t}"][0]
-            obs.ra = result[f"ra{t}"][0]
-            obs.dec = result[f"decl{t}"][0]
-            obs.rotSkyPos = result[f"rotSkyPos{t}"][0]
-            obs.nexp = result[f"nexp{t}"][0]
+            mjd = result[f"mjd{t}"][0]
+            ra = result[f"ra{t}"][0]
+            dec = result[f"decl{t}"][0]
+            rotSkyPos = result[f"rotSkyPos{t}"][0]
+            nexp = result[f"nexp{t}"][0]
+            obs = Observation(
+                mjd=mjd, ra=ra, dec=dec, rotSkyPos=rotSkyPos, nexp=nexp
+            )
+            obslist.append(obs)
         return obslist
 
-    def get_schedule(self) -> list[Observation]:
+    async def get_schedule(self) -> list[Observation]:
         """Return the latest schedule item from the EFD"""
         query = (
             'SELECT * FROM "efd"."autogen"."lsst.sal.Scheduler.'
@@ -80,7 +73,7 @@ class EfdHelp:
 
 
 class MockEfdHelp(EfdHelp):
-    def get_schedule(self) -> list[Observation]:
+    async def get_schedule(self) -> list[Observation]:
         observations = []
         obs = Observation(
             mjd="60032.194918981484",
@@ -91,3 +84,27 @@ class MockEfdHelp(EfdHelp):
         )
         observations.append(obs)
         return observations
+
+
+# sort of singleton
+efdHelper: EfdHelp | None = None
+
+
+class EfdHelpProvider:
+    @staticmethod
+    def getHelper() -> EfdHelp:
+        """
+        :return: EfdHelp the helper
+        """
+        global efdHelper
+        if efdHelper is None:
+            if "EFD" in os.environ:
+                efd = os.environ["EFD"]
+                client = EfdClient(efd_name=efd)
+                client.output = "dataframe"
+                efdHelper = EfdHelp(client=client.influx_client)
+            else:
+                efdHelper = MockEfdHelp(None)
+                logging.warning("Using MOCK EFD - EFD env not set.")
+
+        return efdHelper

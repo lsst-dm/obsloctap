@@ -14,3 +14,5 @@ uvicorn
 
 # Other dependencies.
 safir>=3.4.0
+lsst-efd-client
+requests

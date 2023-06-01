@@ -6,7 +6,8 @@ from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
 
 from ..config import config
-from ..models import Index
+from ..efd import EfdHelpProvider
+from ..models import Index, Observation
 
 __all__ = ["get_index", "external_router"]
 
@@ -16,23 +17,15 @@ external_router = APIRouter()
 
 @external_router.get(
     "/",
-    description=(
-        "Document the top-level API here. By default it only returns metadata"
-        " about the application."
-    ),
+    description=("Index page, about the application."),
     response_model=Index,
     response_model_exclude_none=True,
-    summary="Application metadata",
+    summary="About Rubin obsloctap",
 )
 async def get_index(
     logger: BoundLogger = Depends(logger_dependency),
 ) -> Index:
-    """GET ``/obsloctap/`` (the app's external root).
-
-    Customize this handler to return whatever the top-level resource of your
-    application should return. For example, consider listing key API URLs.
-    When doing so, also change or customize the response model in
-    `obsloctap.models.Index`.
+    """GET ``/`` (the app's external root).
 
     By convention, the root of the external API includes a field called
     ``metadata`` that provides the same Safir-generated metadata as the
@@ -47,4 +40,17 @@ async def get_index(
         package_name="obsloctap",
         application_name=config.name,
     )
-    return Index(metadata=metadata)
+    page = Index(metadata=metadata)
+
+    return page
+
+
+@external_router.get(
+    "/schedule",
+    description="Return the curent observing schedule.",
+    response_model=list[Observation],
+    response_model_exclude_none=True,
+    summary="Observation Schedule",
+)
+async def get_schedule() -> list[Observation]:
+    return await EfdHelpProvider.getHelper().get_schedule()

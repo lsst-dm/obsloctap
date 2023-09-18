@@ -98,7 +98,6 @@ disallow_untyped_defs = true
 disallow_incomplete_defs = true
 ignore_missing_imports = true
 local_partial_types = true
-plugins = ["pydantic.mypy"]
 no_implicit_reexport = true
 show_error_codes = true
 strict_equality = true

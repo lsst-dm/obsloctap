@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from safir.logging import LogLevel, Profile
 
 __all__ = ["Configuration", "config"]
@@ -33,6 +34,18 @@ class Configuration(BaseSettings):
         LogLevel.INFO,
         title="Log level of the application's logger",
         env="SAFIR_LOG_LEVEL",
+    )
+
+    database_url: str = Field(
+        "",
+        title="URL for postgres database",
+        env="database_url",
+    )
+
+    database_password: str = Field(
+        "",
+        title="password for postgres database",
+        env="database_password",
     )
 
 

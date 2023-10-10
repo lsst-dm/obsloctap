@@ -13,6 +13,11 @@ starlette
 uvicorn
 
 # Other dependencies.
+pandas
 safir>=3.4.0
-lsst-efd-client
 requests
+aiokafka
+astro_metadata_translator
+lsst.resources
+sqlalchemy
+# this causes lot of whacky errors lsst-efd-client

@@ -35,6 +35,18 @@ class Configuration(BaseSettings):
         env="SAFIR_LOG_LEVEL",
     )
 
+    database_url: str = Field(
+        "",
+        title="URL for postgres database",
+        env="database_url",
+    )
+
+    database_password: str = Field(
+        "",
+        title="password for postgres database",
+        env="database_password",
+    )
+
 
 config = Configuration()
 """Configuration for obsloctap."""

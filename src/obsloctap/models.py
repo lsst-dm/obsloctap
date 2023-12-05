@@ -96,9 +96,9 @@ class Obsplan(SqlBase):
         ExecStatus
     ]  # Scheduled, Unscheduled, Performed, Aborted
     tracking_type: Mapped[str]  # Sidereal
-    rot_sky_pos: Mapped[
+    rubin_rot_sky_pos: Mapped[
         float
     ]  # logevent_predictedSchedule.rotSkyPos NOT in Obsplan
-    nexp: Mapped[
+    rubin_nexp: Mapped[
         int
     ]  # usually 1, logevent_predictedSchedule.nexp NOT in Obsplan

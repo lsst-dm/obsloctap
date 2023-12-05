@@ -11,6 +11,20 @@ import kafkit
 from lsst.resources import ResourcePath
 from sqlalchemy import create_engine, text
 
+spectral_ranges = {
+    "u": [3.3e-07, 4e-07],
+    " u~nd": [3.3e-07, 4e-07],
+    "g": [4.02e-07, 5.52e-07],
+    "g~nd": [4.02e-07, 5.52e-07],
+    "r": [5.52e-07, 6.91e-07],
+    "r~nd": [5.52e-07, 6.91e-07],
+    "i": [6.91e-07, 8.18e-07],
+    "i~nd": [6.91e-07, 8.18e-07],
+    "z": [8.18e-07, 9.22e-07],
+    "z~nd": [8.18e-07, 9.22e-07],
+    "y": [9.22e-07, 1.06e-06],
+    "y~nd": [9.22e-07, 1.06e-06],
+}
 # Environment variables from deployment
 
 kafka_cluster = os.environ["KAFKA_CLUSTER"]
@@ -52,7 +66,7 @@ async def main() -> None:
         consumer = aiokafka.AIOKafkaConsumer(
             topic,
             bootstrap_servers=kafka_cluster,
-            group_id=kafka_group_id,
+            group_id=f"{kafka_group_id}",
         )
         await consumer.start()
         try:

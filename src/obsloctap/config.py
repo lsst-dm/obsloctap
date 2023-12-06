@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from safir.logging import LogLevel, Profile
 
 __all__ = ["Configuration", "config"]

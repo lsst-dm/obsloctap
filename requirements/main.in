@@ -14,7 +14,7 @@ uvicorn
 
 # Other dependencies.
 pandas
-safir>=3.4.0
+safir[db]>=3.4.0
 requests
 aiokafka
 astro_metadata_translator

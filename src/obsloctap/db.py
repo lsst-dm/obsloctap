@@ -112,7 +112,7 @@ class DbHelpProvider:
                 )
                 dbHelper = DbHelp(engine=engine)
             else:
-                efdHelper = MockDbHelp(None)
+                dbHelper = MockDbHelp(None)
                 logging.warning("Using MOCK DB - PGUSER env not set.")
 
-        return efdHelper
+        return dbHelper

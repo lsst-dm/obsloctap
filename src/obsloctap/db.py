@@ -84,6 +84,7 @@ class DbHelp:
             session.add(observation)
         await session.commit()
         await session.close()
+        logging.warning(f"Inserted {len(observations)} Observations.")
         return len(observations)
 
 
@@ -121,6 +122,8 @@ class DbHelpProvider:
         if dbHelper is None:
             if "database_url" in os.environ:
                 config = Configuration()
+                logging.info(f"Creating SQlAlchemy engine with  {config.database_url}"
+                            f"and {config.database_schema}.")
                 engine = create_database_engine(
                     config.database_url,
                     config.database_password,

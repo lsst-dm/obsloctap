@@ -49,9 +49,21 @@ class Configuration(BaseSettings):
     )
 
     database_schema: str = Field(
-        "",
+        "obsloctap",
         title="schema for postgres database",
         env="database_schema",
+    )
+
+    obsplanLimit: int = Field(
+        1000,
+        title="Limit to use on obsplan query",
+        env="obsplanLimit",
+    )
+
+    obsplanTimeSpan: int = Field(
+        24,
+        title="Time to look back in obsplan query with time in hours",
+        env="obsplanTimeSpan",
     )
 
 

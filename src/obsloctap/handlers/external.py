@@ -7,7 +7,7 @@ from structlog.stdlib import BoundLogger
 
 from ..config import config
 from ..db import DbHelpProvider
-from ..models import Index, Observation
+from ..models import Index, Obsplan
 
 __all__ = ["get_index", "external_router"]
 
@@ -48,9 +48,11 @@ async def get_index(
 @external_router.get(
     "/schedule",
     description="Return the curent observing schedule.",
-    response_model=list[Observation],
+    response_model=list[Obsplan],
     response_model_exclude_none=True,
     summary="Observation Schedule",
 )
-async def get_schedule() -> list[Observation]:
-    return await DbHelpProvider.getHelper().get_schedule()
+async def get_schedule() -> list[Obsplan]:
+    dbhelp = await DbHelpProvider.getHelper()
+    schedule = await dbhelp.get_schedule()
+    return schedule

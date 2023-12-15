@@ -41,12 +41,13 @@ class DbHelp:
         :return: None
         """
         self.engine = engine
+        self.schema = ""
 
     def process(self, result: ScalarResult[Any]) -> list[Observation]:
         """
         Process the result of the query.
 
-        :type self: DnHelp
+        :type self: DbHelp
         :type result: Obsplan[]
         :return: list[Observation]
         """
@@ -80,6 +81,7 @@ class DbHelp:
         """Insert observations into the DB -
         return the count of inserted rows."""
         session = AsyncSession(self.engine)
+        session.execute(f"SET search_path = {self.schema}")
         for observation in observations:
             session.add(observation)
         await session.commit()
@@ -129,9 +131,10 @@ class DbHelpProvider:
                 engine = create_database_engine(
                     config.database_url,
                     config.database_password,
-                    schema=config.database_schema,
                 )
+                #   connect_args={'options': f'-csearch_path={config.database_schema}'}
                 dbHelper = DbHelp(engine=engine)
+                dbHelper.schema = config.database_schema
             else:
                 dbHelper = MockDbHelp(None)
                 logging.warning("Using MOCK DB - database_url  env not set.")

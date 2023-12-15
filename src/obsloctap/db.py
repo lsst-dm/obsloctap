@@ -84,7 +84,7 @@ class DbHelp:
             session.add(observation)
         await session.commit()
         await session.close()
-        logging.warning(f"Inserted {len(observations)} Observations.")
+        logging.info(f"Inserted {len(observations)} Observations.")
         return len(observations)
 
 
@@ -103,7 +103,7 @@ class MockDbHelp(DbHelp):
         observations.append(obs)
         return observations
 
-    async def insert_obsplam(self, observations: list[Observation]) -> int:
+    async def insert_obsplan(self, observations: list[Observation]) -> int:
         MockDbHelp.obslist.extend(observations)
         return len(observations)
 
@@ -122,8 +122,10 @@ class DbHelpProvider:
         if dbHelper is None:
             if "database_url" in os.environ:
                 config = Configuration()
-                logging.info(f"Creating SQlAlchemy engine with  {config.database_url}"
-                            f"and {config.database_schema}.")
+                logging.info(
+                    f"Creating SQlAlchemy engine with  {config.database_url}"
+                    f" and schema: {config.database_schema}."
+                )
                 engine = create_database_engine(
                     config.database_url,
                     config.database_password,

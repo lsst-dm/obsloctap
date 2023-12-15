@@ -7,11 +7,14 @@ import os
 from typing import Any
 
 from pandas import Timedelta, Timestamp
-from safir.database import create_database_engine
 from sqlalchemy import ScalarResult, Select, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    create_async_engine,
+)
 
-from obsloctap.models import Observation, Obsplan
+from obsloctap.models import Observation, Obsplan, SqlBase
 
 from .config import Configuration
 
@@ -41,12 +44,13 @@ class DbHelp:
         :return: None
         """
         self.engine = engine
+        self.schema = ""
 
     def process(self, result: ScalarResult[Any]) -> list[Observation]:
         """
         Process the result of the query.
 
-        :type self: DnHelp
+        :type self: DbHelp
         :type result: Obsplan[]
         :return: list[Observation]
         """
@@ -80,10 +84,12 @@ class DbHelp:
         """Insert observations into the DB -
         return the count of inserted rows."""
         session = AsyncSession(self.engine)
+        session.execute(f"SET search_path = {self.schema}")
         for observation in observations:
             session.add(observation)
         await session.commit()
         await session.close()
+        logging.info(f"Inserted {len(observations)} Observations.")
         return len(observations)
 
 
@@ -102,7 +108,7 @@ class MockDbHelp(DbHelp):
         observations.append(obs)
         return observations
 
-    async def insert_obsplam(self, observations: list[Observation]) -> int:
+    async def insert_obsplan(self, observations: list[Observation]) -> int:
         MockDbHelp.obslist.extend(observations)
         return len(observations)
 
@@ -121,12 +127,20 @@ class DbHelpProvider:
         if dbHelper is None:
             if "database_url" in os.environ:
                 config = Configuration()
-                engine = create_database_engine(
+                logging.info(
+                    f"Creating SQlAlchemy engine with  {config.database_url}"
+                    f" and schema: {config.database_schema}."
+                )
+                engine = create_async_engine(
                     config.database_url,
-                    config.database_password,
-                    schema=config.database_schema,
+                    connect_args={
+                        "options": f"-csearch_path={config.database_schema}"
+                    },
                 )
                 dbHelper = DbHelp(engine=engine)
+                dbHelper.schema = config.database_schema
+
+                engine.begin().run_sync(SqlBase.metadata.create_all)
             else:
                 dbHelper = MockDbHelp(None)
                 logging.warning("Using MOCK DB - database_url  env not set.")

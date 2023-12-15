@@ -2,15 +2,17 @@
 
 __all__ = ["DbHelp", "DbHelpProvider"]
 
-import asyncio
 import logging
 import os
 from typing import Any
 
 from pandas import Timedelta, Timestamp
-from safir.database import create_database_engine
 from sqlalchemy import ScalarResult, Select, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    create_async_engine,
+)
 
 from obsloctap.models import Observation, Obsplan, SqlBase
 
@@ -129,12 +131,12 @@ class DbHelpProvider:
                     f"Creating SQlAlchemy engine with  {config.database_url}"
                     f" and schema: {config.database_schema}."
                 )
-                engine = create_database_engine(
+                engine = create_async_engine(
                     config.database_url,
-                    config.database_password,
+                    connect_args={
+                        "options": f"-csearch_path={config.database_schema}"
+                    },
                 )
-                #   connect_args=
-                #   {'options': f'-csearch_path={config.database_schema}'}
                 dbHelper = DbHelp(engine=engine)
                 dbHelper.schema = config.database_schema
 

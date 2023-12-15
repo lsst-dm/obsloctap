@@ -48,6 +48,12 @@ class Configuration(BaseSettings):
         env="database_password",
     )
 
+    database_schema: str = Field(
+        "",
+        title="schema for postgres database",
+        env="database_schema",
+    )
+
 
 config = Configuration()
 """Configuration for obsloctap."""

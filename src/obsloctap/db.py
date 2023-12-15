@@ -76,8 +76,20 @@ class DbHelp:
         await session.close()
         return self.process(obs)
 
+    async def insert_obsplan(self, observations: list[Observation]) -> int:
+        """Insert observations into the DB -
+        return the count of inserted rows."""
+        session = AsyncSession(self.engine)
+        for observation in observations:
+            session.add(observation)
+        await session.commit()
+        await session.close()
+        return len(observations)
+
 
 class MockDbHelp(DbHelp):
+    obslist = list[Observation]()
+
     async def get_schedule(self) -> list[Observation]:
         observations = []
         obs = Observation(
@@ -89,6 +101,10 @@ class MockDbHelp(DbHelp):
         )
         observations.append(obs)
         return observations
+
+    async def insert_obsplam(self, observations: list[Observation]) -> int:
+        MockDbHelp.obslist.extend(observations)
+        return len(observations)
 
 
 # sort of singleton
@@ -103,16 +119,16 @@ class DbHelpProvider:
         """
         global dbHelper
         if dbHelper is None:
-            if "PGUSER" in os.environ:
-                # user = os.environ["PGUSER"]
+            if "database_url" in os.environ:
                 config = Configuration()
-
                 engine = create_database_engine(
-                    config.database_url, config.database_password
+                    config.database_url,
+                    config.database_password,
+                    schema=config.database_schema,
                 )
                 dbHelper = DbHelp(engine=engine)
             else:
                 dbHelper = MockDbHelp(None)
-                logging.warning("Using MOCK DB - PGUSER env not set.")
+                logging.warning("Using MOCK DB - database_url  env not set.")
 
         return dbHelper

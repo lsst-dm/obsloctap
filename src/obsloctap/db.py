@@ -2,6 +2,7 @@
 
 __all__ = ["DbHelp", "DbHelpProvider"]
 
+import asyncio
 import logging
 import os
 from typing import Any
@@ -136,10 +137,8 @@ class DbHelpProvider:
                 #   {'options': f'-csearch_path={config.database_schema}'}
                 dbHelper = DbHelp(engine=engine)
                 dbHelper.schema = config.database_schema
-                SqlBase.metadata.create_all(
-                    bind=engine, schema=config.database_schema
-                )
 
+                engine.begin().run_sync(SqlBase.metadata.create_all)
             else:
                 dbHelper = MockDbHelp(None)
                 logging.warning("Using MOCK DB - database_url  env not set.")

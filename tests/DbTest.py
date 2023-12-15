@@ -1,5 +1,6 @@
 # This should only run where the database is available..
 from __future__ import annotations
+
 import pytest
 
 from obsloctap.db import DbHelpProvider, MockDbHelp
@@ -22,6 +23,4 @@ async def test_insert() -> None:
     )
 
     count = await dbhelp.insert_obsplan([plan])
-    self.assertEqual(1, count)  # add assertion here
-
-
+    assert 1 == count

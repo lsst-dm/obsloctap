@@ -11,7 +11,7 @@ from safir.database import create_database_engine
 from sqlalchemy import ScalarResult, Select, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from obsloctap.models import Observation, Obsplan
+from obsloctap.models import Observation, Obsplan, SqlBase
 
 from .config import Configuration
 
@@ -132,9 +132,14 @@ class DbHelpProvider:
                     config.database_url,
                     config.database_password,
                 )
-                #   connect_args={'options': f'-csearch_path={config.database_schema}'}
+                #   connect_args=
+                #   {'options': f'-csearch_path={config.database_schema}'}
                 dbHelper = DbHelp(engine=engine)
                 dbHelper.schema = config.database_schema
+                SqlBase.metadata.create_all(
+                    bind=engine, schema=config.database_schema
+                )
+
             else:
                 dbHelper = MockDbHelp(None)
                 logging.warning("Using MOCK DB - database_url  env not set.")

@@ -59,8 +59,9 @@ class Obsplan(SqlBase):
         self.priority = 1
         self.tracking_type = "sidereal"
 
-    __tablename__ = "obsplan"
-    t_planning: Mapped[str]  # logevent_predictedSchedule.mjd
+    __tablename__ = "ObsPlan"
+    # logevent_predictedSchedule.mjd
+    t_planning: Mapped[str] = mapped_column(primary_key=True)
     target_name: Mapped[str]  # this will probalby always be empty
     obs_id: Mapped[int] = mapped_column(
         primary_key=True

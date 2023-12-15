@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
     create_async_engine,
 )
+from sqlalchemy.engine import AdaptedConnection
 
 from obsloctap.models import Observation, Obsplan, SqlBase
 
@@ -119,7 +120,7 @@ dbHelper: DbHelp | None = None
 
 class DbHelpProvider:
     @staticmethod
-    def getHelper() -> DbHelp:
+    async def getHelper() -> DbHelp:
         """
         :return: EfdHelp the helper
         """
@@ -128,19 +129,20 @@ class DbHelpProvider:
             if "database_url" in os.environ:
                 config = Configuration()
                 logging.info(
-                    f"Creating SQlAlchemy engine with  {config.database_url}"
+                    f"Creating SQlAlchemy engine with  {config.database_url[0:20]}..."
                     f" and schema: {config.database_schema}."
                 )
                 engine = create_async_engine(
-                    config.database_url,
-                    connect_args={
-                        "options": f"-csearch_path={config.database_schema}"
-                    },
+                    config.database_url
                 )
                 dbHelper = DbHelp(engine=engine)
                 dbHelper.schema = config.database_schema
+                meta = SqlBase.metadata
+                logging.info("Got engine")
+                async with engine.begin() as conn:
+                    await conn.run_sync(meta.create_all)
+                logging.info("Registered tables ")
 
-                engine.begin().run_sync(SqlBase.metadata.create_all)
             else:
                 dbHelper = MockDbHelp(None)
                 logging.warning("Using MOCK DB - database_url  env not set.")

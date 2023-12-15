@@ -9,7 +9,7 @@ from obsloctap.models import Observation
 
 @pytest.mark.asyncio
 async def test_insert() -> None:
-    dbhelp = DbHelpProvider().getHelper()
+    dbhelp = await DbHelpProvider().getHelper()
     if isinstance(dbhelp, MockDbHelp):
         print("Not running DB test - got Mock DB")
         return

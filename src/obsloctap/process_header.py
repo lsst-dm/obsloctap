@@ -9,7 +9,8 @@ import aiokafka
 import httpx
 import kafkit
 from lsst.resources import ResourcePath
-from sqlalchemy import create_engine, text
+
+from obsloctap.db import DbHelpProvider
 
 spectral_ranges = {
     "u": [3.3e-07, 4e-07],
@@ -34,22 +35,14 @@ tenant = os.environ.get("BUCKET_TENANT", None)
 kafka_group_id = 1
 
 topic = "lsst.ATHeaderService.logevent_largeFileObjectAvailable"
-
-engine = create_engine(db_url)
+dbhelp = DbHelpProvider().getHelper()
 
 
 def process_resource(resource: ResourcePath) -> None:
     content = json.loads(resource.read())
-    with engine.begin() as conn:
-        # TODO get all fields and tables, do as a transaction
-        conn.execute(
-            text(
-                "INSERT INTO exposure (a, b, c, d, e)"
-                " VALUES(:a, :b, :c, :d, :e)"
-            ),
-            [dict(a=content["something"], b=2, c=3, d=4, e=5)],
-        )
-        # TODO check result
+    print(content)  # TODO remove
+    print("Not processing yet - just printing")
+    # TODO create Obsplan use dbhelp to do the insert ..
 
 
 async def main() -> None:

@@ -18,7 +18,8 @@ async def test_insert() -> None:
         return
 
     plan = Obsplan()
-    plan.t_planning = Timestamp.now().to_julian_date()
+    now: float = Timestamp.now().to_julian_date()
+    plan.t_planning = now
     plan.s_ra = 90.90909091666666
     plan.s_dec = -74.60384434722222
     plan.rubin_nexp = 3
@@ -47,7 +48,7 @@ async def test_insert() -> None:
     # now get it back
     plans = await dbhelp.get_schedule(time=100)
 
-    await dbhelp.tidyup(plan.t_planning)
+    await dbhelp.tidyup(now)
 
     assert len(plans) >= 1
 

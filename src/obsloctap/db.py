@@ -177,7 +177,7 @@ class MockDbHelp(DbHelp):
         obs.s_ra = 90.90909091666666
         obs.s_dec = -74.60384434722222
         obs.rubin_rot_sky_pos = 18.33895879413964
-        obs.rubin_nexpnexp = 3
+        obs.rubin_nexp = 3
         observations.append(obs)
         return observations
 

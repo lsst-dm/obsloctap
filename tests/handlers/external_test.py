@@ -23,12 +23,12 @@ async def test_get_exernal_index(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_schedule(client: AsyncClient) -> None:
-    """will use mock efd for local esting"""
+    """will use mock for local esting"""
     response = await client.get(f"{config.path_prefix}/schedule")
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 1
     obs = data[0]
-    assert "nexp" in obs
-    assert "mjd" in obs
-    assert data[0]["mjd"] == "60032.194918981484"
+    assert "rubin_nexp" in obs
+    assert "t_planning" in obs
+    assert data[0]["t_planning"] == 60032.194918981484

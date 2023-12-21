@@ -36,10 +36,22 @@ class Configuration(BaseSettings):
         env="SAFIR_LOG_LEVEL",
     )
 
+    database: str = Field(
+        "",
+        title="postgres database name",
+        env="database",
+    )
+
     database_url: str = Field(
         "",
         title="URL for postgres database",
         env="database_url",
+    )
+
+    database_user: str = Field(
+        "",
+        title="user for postgres database",
+        env="database_user",
     )
 
     database_password: str = Field(

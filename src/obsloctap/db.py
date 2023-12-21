@@ -177,7 +177,7 @@ class MockDbHelp(DbHelp):
         obs.s_ra = 90.90909091666666
         obs.s_dec = -74.60384434722222
         obs.rubin_rot_sky_pos = 18.33895879413964
-        obs.rubin_nexpnexp = 3
+        obs.rubin_nexp = 3
         observations.append(obs)
         return observations
 
@@ -200,12 +200,18 @@ class DbHelpProvider:
         if dbHelper is None:
             if "database_url" in os.environ:
                 config = Configuration()
+                full_url = (
+                    f"postgresql+asyncpg://{config.database_user}:"
+                    f"{config.database_password}@"
+                    f"{config.database_url}/{config.database}"
+                )
                 logging.info(
                     f"Creating SQlAlchemy engine with "
-                    f"{config.database_url[0:25]}......"
+                    f"{config.database_user}@{config.database_url}"
+                    f"/config.database"
                     f" and schema: {config.database_schema}."
                 )
-                engine = create_async_engine(config.database_url)
+                engine = create_async_engine(full_url)
                 dbHelper = DbHelp(engine=engine)
                 dbHelper.schema = config.database_schema
                 logging.info("Got engine")

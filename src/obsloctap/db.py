@@ -1,6 +1,6 @@
 """Helper for the efd -so it may be mocked in test."""
 
-__all__ = ["DbHelp", "DbHelpProvider"]
+__all__ = ["DbHelp", "DbHelpProvider", "OBSPLAN_FIELDS"]
 
 import logging
 import os

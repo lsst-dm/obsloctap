@@ -6,7 +6,7 @@ Be aware that, following the normal pattern for FastAPI services, the app is
 constructed when this module is loaded and is not deferred until a function is
 called.
 """
-
+import os
 from importlib.metadata import metadata, version
 
 from fastapi import FastAPI
@@ -41,6 +41,11 @@ app = FastAPI(
 # Attach the routers.
 app.include_router(internal_router)
 app.include_router(external_router, prefix=config.path_prefix)
+
+print("Chekcing .lsst")
+dir = "/home/worker/.lsst/"
+if os.path.isdir(dir):
+    print(os.listdir("/home/worker/.lsst/"))
 
 # Add middleware.
 app.add_middleware(XForwardedMiddleware)

@@ -6,6 +6,7 @@ Be aware that, following the normal pattern for FastAPI services, the app is
 constructed when this module is loaded and is not deferred until a function is
 called.
 """
+import logging
 import os
 from importlib.metadata import metadata, version
 
@@ -28,6 +29,8 @@ configure_logging(
 )
 configure_uvicorn_logging(config.log_level)
 
+log = logging.getLogger(__name__)
+
 app = FastAPI(
     title="obsloctap",
     description=metadata("obsloctap")["Summary"],
@@ -45,7 +48,7 @@ app.include_router(external_router, prefix=config.path_prefix)
 print("Chekcing .lsst")
 dir = "/home/worker/.lsst/"
 if os.path.isdir(dir):
-    print(os.listdir("/home/worker/.lsst/"))
+    logging.info(os.listdir("/home/worker/.lsst/"))
 
 # Add middleware.
 app.add_middleware(XForwardedMiddleware)

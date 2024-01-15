@@ -49,13 +49,15 @@ print("Chekcing .lsst")
 dir = "/home/worker/.lsst/"
 if os.path.isdir(dir):
     logging.info(os.listdir("/home/worker/.lsst/"))
-
+else:
+    logging.info("No .lsst dir")
 # Add middleware.
 app.add_middleware(XForwardedMiddleware)
 
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    logging.info("Starting up")
     pass
 
 

@@ -9,7 +9,7 @@
 
 -c main.txt
 
-felis
+#failign for now felis
 asgi-lifespan
 coverage
 httpx

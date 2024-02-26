@@ -28,4 +28,4 @@ async def test_get_schedule(client: AsyncClient) -> None:
     data = response.json()
     assert len(data) >= 1
     obs = data[0]
-    assert "nexp" in obs
+    assert "rubin_nexp" in obs

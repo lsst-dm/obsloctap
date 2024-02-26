@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from safir.logging import LogLevel, Profile
 
 __all__ = ["Configuration", "config"]
@@ -33,6 +34,48 @@ class Configuration(BaseSettings):
         LogLevel.INFO,
         title="Log level of the application's logger",
         env="SAFIR_LOG_LEVEL",
+    )
+
+    database: str = Field(
+        "",
+        title="postgres database name",
+        env="database",
+    )
+
+    database_url: str = Field(
+        "",
+        title="URL for postgres database",
+        env="database_url",
+    )
+
+    database_user: str = Field(
+        "",
+        title="user for postgres database",
+        env="database_user",
+    )
+
+    database_password: str = Field(
+        "",
+        title="password for postgres database",
+        env="database_password",
+    )
+
+    database_schema: str = Field(
+        "obsloctap",
+        title="schema for postgres database",
+        env="database_schema",
+    )
+
+    obsplanLimit: int = Field(
+        1000,
+        title="Limit to use on obsplan query",
+        env="obsplanLimit",
+    )
+
+    obsplanTimeSpan: int = Field(
+        24,
+        title="Time to look back in obsplan query with time in hours",
+        env="obsplanTimeSpan",
     )
 
 

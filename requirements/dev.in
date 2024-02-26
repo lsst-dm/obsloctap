@@ -9,6 +9,7 @@
 
 -c main.txt
 
+#failign for now felis
 asgi-lifespan
 coverage
 httpx
@@ -18,3 +19,4 @@ pydantic
 pytest
 pytest-asyncio
 pytest-cov
+greenlet

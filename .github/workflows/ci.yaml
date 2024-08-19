@@ -93,7 +93,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          dockerfile: Dockerfile.obsloctap
+          file: Dockerfile.obsloctap
           push: true
           tags: |
             ghcr.io/lsst-dm/obsloctap:${{ steps.vars.outputs.tag }}
@@ -104,7 +104,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          dockerfile: Dockerfile.consume-kafka
+          file: Dockerfile.consume-kafka
           push: true
           tags: |
             ghcr.io/lsst-dm/consume-kafka:${{ steps.vars.outputs.tag }}

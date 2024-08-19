@@ -34,7 +34,8 @@ db_url = os.environ["DB_URL"]
 tenant = os.environ.get("BUCKET_TENANT", None)
 kafka_group_id = 1
 
-topic = "lsst.ATHeaderService.logevent_largeFileObjectAvailable"
+# TODO this needs to be LSSTCam but that doe snot exist yet
+topic = "lsst.MTHeaderService.logevent_largeFileObjectAvailable"
 dbhelp = DbHelpProvider().getHelper()
 
 

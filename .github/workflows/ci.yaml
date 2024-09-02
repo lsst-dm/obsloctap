@@ -89,12 +89,24 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push obsloctap
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile.obsloctap
           push: true
           tags: |
             ghcr.io/lsst-dm/obsloctap:${{ steps.vars.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push consumekafka
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.consumekafka
+          push: true
+          tags: |
+            ghcr.io/lsst-dm/consumekafka:${{ steps.vars.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

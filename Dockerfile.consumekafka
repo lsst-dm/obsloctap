@@ -20,4 +20,4 @@ RUN source /opt/lsst/software/stack/loadLSST.bash && pip install -e .
 #   KAFKA_GROUP_ID: name of consumer group, default is "obsloctap-consumer"
 #   KAFKA_USERNAME: username for SASL_PLAIN authentication, default is "obsloctap"
 
-ENTRYPOINT [ "bash", "-c", "source loadLSST.bash; setup obs_lsst; python -m obsloctap.consume-kafka.py" ]
+ENTRYPOINT [ "bash", "-c", "source loadLSST.bash; setup obs_lsst; python -m obsloctap.consumekafka.py" ]

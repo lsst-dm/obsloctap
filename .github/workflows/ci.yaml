@@ -100,13 +100,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push consume-kafka
+      - name: Build and push consumekafka
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.consume-kafka
+          file: Dockerfile.consumekafka
           push: true
           tags: |
-            ghcr.io/lsst-dm/consume-kafka:${{ steps.vars.outputs.tag }}
+            ghcr.io/lsst-dm/consumekafka:${{ steps.vars.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

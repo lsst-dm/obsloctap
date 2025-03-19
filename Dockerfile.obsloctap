@@ -20,7 +20,7 @@ FROM python:3.13.6-slim-bullseye as base-image
 COPY scripts/install-base-packages.sh .
 RUN ./install-base-packages.sh && rm ./install-base-packages.sh
 
-FROM base-image AS dependencies-image
+FROM base-image as dependencies-image
 
 # Install system packages only needed for building dependencies.
 COPY scripts/install-dependency-packages.sh .
@@ -38,7 +38,7 @@ RUN pip install --upgrade --no-cache-dir pip setuptools wheel
 COPY requirements/main.txt ./requirements.txt
 RUN pip install --quiet --no-cache-dir -r requirements.txt
 
-FROM dependencies-image AS install-image
+FROM dependencies-image as install-image
 
 # Use the virtualenv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -47,7 +47,7 @@ COPY . /workdir
 WORKDIR /workdir
 RUN pip install --no-cache-dir .
 
-FROM base-image AS runtime-image
+FROM base-image as runtime-image
 
 # Create a non-root user
 RUN useradd --create-home appuser

@@ -130,7 +130,7 @@ class DbHelp:
             if getattr(observation, key) is None:
                 value_str.write("NULL")
             else:
-                value_str.write(f"'{getattr(observation,key)}'")
+                value_str.write(f"'{getattr(observation, key)}'")
             if (count + 1) < len(OBSPLAN_FIELDS):
                 value_str.write(",")
 
@@ -201,7 +201,8 @@ class DbHelpProvider:
             if "database_url" in os.environ:
                 config = Configuration()
                 full_url = (
-                    f"postgresql+asyncpg://{config.database_user}:"
+                    f"postgresql+asyncpg"
+                    f"://{config.database_user}:"  # noqa: E231
                     f"{config.database_password}@"
                     f"{config.database_url}/{config.database}"
                 )

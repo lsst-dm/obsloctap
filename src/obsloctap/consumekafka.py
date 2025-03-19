@@ -1,4 +1,5 @@
 """Copied from consdb -and perhaps they could be combined in the future"""
+
 import asyncio
 import json
 import os
@@ -30,8 +31,7 @@ spectral_ranges = {
 
 kafka_cluster = os.environ["KAFKA_CLUSTER"]
 schema_url = os.environ["SCHEMA_URL"]
-db_url = os.environ["DB_URL"]
-tenant = os.environ.get("BUCKET_TENANT", None)
+db_url = os.environ["database_url"]
 kafka_group_id = 1
 
 # TODO this needs to be LSSTCam but that doe snot exist yet
@@ -67,13 +67,6 @@ async def main() -> None:
             async for msg in consumer:
                 message = (await deserializer.deserialize(msg.value)).message
                 resource = ResourcePath(message.url)
-                if tenant:
-                    new_scheme = resource.scheme
-                    new_netloc = f"{tenant}:{resource.netloc}"
-                    new_path = resource.path
-                    resource = ResourcePath(
-                        f"{new_scheme}://{new_netloc}/{new_path}"
-                    )
                 # Alternative 1: block for file
                 while not resource.exists():
                     time.sleep(random.uniform(0.1, 2.0))

@@ -1,6 +1,5 @@
 """Models for obsloctap."""
 
-
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -42,12 +41,12 @@ class Obsplan(BaseModel):
     t_max: Optional[float] = 30  # dimensionRecord.timespan.end
     t_exptime: Optional[float] = 30  # t_max - t_min
     t_resolution: Optional[int] = 15  # always 15s
-    em_min: Optional[
-        float
-    ] = 0  # Start in spectral coordinates - filter low edge in meters
-    em_max: Optional[
-        float
-    ] = 0  # Stop in spectral coordinates - filter high edge in meters
+    em_min: Optional[float] = (
+        0  # Start in spectral coordinates - filter low edge in meters
+    )
+    em_max: Optional[float] = (
+        0  # Stop in spectral coordinates - filter high edge in meters
+    )
     em_res_power: Optional[float] = 0
     o_ucd: Optional[str] = "phot.flux.density"  # phot.flux.density?
     pol_states: Optional[str] = None
@@ -60,9 +59,9 @@ class Obsplan(BaseModel):
     execution_status: Optional[str] = "Scheduled"
     # Scheduled, Unscheduled, Performed, Aborted
     tracking_type: Optional[str] = "Sidereal"
-    rubin_rot_sky_pos: Optional[
-        float
-    ] = 0  # logevent_predictedSchedule.rotSkyPos
+    rubin_rot_sky_pos: Optional[float] = (
+        0  # logevent_predictedSchedule.rotSkyPos
+    )
     # NOT in Obsplan
     rubin_nexp: Optional[int] = 1  # usually 1,
     # logevent_predictedSchedule.nexp NOT in Obsplan

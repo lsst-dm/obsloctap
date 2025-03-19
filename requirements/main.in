@@ -17,6 +17,7 @@ pandas
 safir[db]>=3.4.0
 requests
 aiokafka
+kafkit
 astro_metadata_translator
 lsst.resources
 sqlalchemy

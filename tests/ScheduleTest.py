@@ -1,0 +1,16 @@
+import unittest
+
+import pandas as pd
+
+from obsloctap.schedule24h import Schedule24
+
+
+class TestSchedule(unittest.TestCase):
+    def test_schedule_format(self) -> None:
+        visits = pd.read_pickle("tests/schedule24.pkl")
+        obs = Schedule24().format_schedule(visits)
+        self.assertEqual(len(obs), len(visits), "Not all entries")
+        self.assertGreaterEqual(len(obs), 10, "Not enough entries")
+
+
+python_classes = "TestCase"

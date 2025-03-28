@@ -5,7 +5,23 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from safir.metadata import Metadata as SafirMetadata
 
-__all__ = ["Index", "Obsplan"]
+__all__ = ["Index", "Obsplan", "spectral_ranges"]
+
+
+spectral_ranges = {
+    "u": [3.3e-07, 4e-07],
+    " u~nd": [3.3e-07, 4e-07],
+    "g": [4.02e-07, 5.52e-07],
+    "g~nd": [4.02e-07, 5.52e-07],
+    "r": [5.52e-07, 6.91e-07],
+    "r~nd": [5.52e-07, 6.91e-07],
+    "i": [6.91e-07, 8.18e-07],
+    "i~nd": [6.91e-07, 8.18e-07],
+    "z": [8.18e-07, 9.22e-07],
+    "z~nd": [8.18e-07, 9.22e-07],
+    "y": [9.22e-07, 1.06e-06],
+    "y~nd": [9.22e-07, 1.06e-06],
+}
 
 
 class Index(BaseModel):

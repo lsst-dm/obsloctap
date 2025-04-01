@@ -8,10 +8,9 @@ import time
 
 import aiokafka
 import httpx
-import kafkit
+from kafkit import registry
 from lsst.resources import ResourcePath
 
-from obsloctap.db import DbHelpProvider
 from obsloctap.schedule24h import Schedule24
 
 # Environment variables from deployment
@@ -23,7 +22,6 @@ kafka_group_id = 1
 
 # TODO this needs to be LSSTCam but that doe snot exist yet
 topic = "lsst.MTHeaderService.logevent_largeFileObjectAvailable"
-dbhelp = DbHelpProvider().getHelper()
 sched24 = Schedule24()
 
 
@@ -36,10 +34,8 @@ def process_resource(resource: ResourcePath) -> None:
 
 async def main() -> None:
     async with httpx.AsyncClient() as client:
-        schema_registry = kafkit.registry.RegistryApi(
-            client=client, url=schema_url
-        )
-        deserializer = kafkit.registry.Deserializer(registry=schema_registry)
+        schema_registry = registry.RegistryApi(client=client, url=schema_url)
+        deserializer = registry.Deserializer(registry=schema_registry)
 
         # Alternative 2:
         # Something like

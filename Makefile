@@ -25,3 +25,6 @@ update: update-deps init
 .PHONY: run
 run:
 	tox run -e run
+
+consume:
+	docker  build  . -f Dockerfile.consumekafka -t consumekafka

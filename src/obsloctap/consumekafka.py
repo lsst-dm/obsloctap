@@ -19,6 +19,7 @@ kafka_password = os.environ["KAFKA_PASSWORD"]
 kafka_schema_url = os.environ["SCHEMA_URL"]
 db_url = os.environ["database_url"]
 kafka_group_id = 1
+jaas = ("org.apache.kafka.common.security.scram.ScramLoginModule required",)
 
 # TODO this needs to be LSSTCam but that doe snot exist yet
 topic = "lsst.sal.MTHeaderService.logevent_largeFileObjectAvailable"

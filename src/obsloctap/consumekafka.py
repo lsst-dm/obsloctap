@@ -33,7 +33,7 @@ def process_resource(resource: ResourcePath) -> None:
     # TODO create Obsplan use dbhelp to do the insert ..
 
 
-async def main() -> None:
+async def consume() -> None:
     consumer = aiokafka.AIOKafkaConsumer(
         topic,
         bootstrap_servers=kafka_cluster,
@@ -60,4 +60,9 @@ async def main() -> None:
         await consumer.stop()
 
 
-asyncio.run(main())
+print("doing24hs")
+runner = asyncio.Runner()
+runner.run(Schedule24.do24hs())
+print("now kafka")
+runner.run(consume())
+runner.close()

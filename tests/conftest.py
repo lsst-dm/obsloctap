@@ -7,9 +7,15 @@ from typing import AsyncIterator
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from obsloctap import main
+
+
+@pytest_asyncio.fixture
+async def http_client() -> AsyncIterator[AsyncClient]:
+    async with AsyncClient() as client:
+        yield client
 
 
 @pytest_asyncio.fixture
@@ -26,5 +32,7 @@ async def app() -> AsyncIterator[FastAPI]:
 @pytest_asyncio.fixture
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     """Return an ``httpx.AsyncClient`` configured to talk to the test app."""
-    async with AsyncClient(app=app, base_url="https://example.com/") as client:
+    async with AsyncClient(
+        base_url="https://example.com/", transport=ASGITransport(app=app)
+    ) as client:
         yield client

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import random
 import time
@@ -11,6 +12,18 @@ from lsst.resources import ResourcePath
 
 from obsloctap.schedule24h import Schedule24
 
+# Configure logging
+log = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+formatter = logging.Formatter(
+    "%(asctime)s [%(name)-12s] %(levelname)-8s %(message)s"
+)
+handler.setFormatter(formatter)
+log.addHandler(handler)
+if "LOG_LEVEL" in os.environ:
+    log.setLevel(os.environ["LOG_LEVEL"].upper())
+else:
+    log.setLevel("DEBUG")
 # Environment variables from deployment
 
 kafka_cluster = os.environ["KAFKA_CLUSTER"]

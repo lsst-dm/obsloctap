@@ -171,6 +171,7 @@ class MockDbHelp(DbHelp):
     obslist = list[Obsplan]()
 
     async def get_schedule(self, time: float = 0) -> list[Obsplan]:
+        log.warning("Using MOCKDBHelp")
         observations = []
         obs = Obsplan()
         obs.t_planning = 60032.194918981484

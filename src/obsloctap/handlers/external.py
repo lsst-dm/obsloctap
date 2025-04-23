@@ -1,6 +1,7 @@
 """Handlers for the app's external root, ``/obsloctap/``."""
 
 from fastapi import APIRouter, Depends
+from fastapi.params import Query
 from safir.dependencies.logger import logger_dependency
 from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
@@ -34,7 +35,7 @@ async def get_index(
     # There is no need to log simple requests since uvicorn will do this
     # automatically, but this is included as an example of how to use the
     # logger for more complex logging.
-    logger.info("Request for application metadata")
+    logger.debug("Request for application metadata")
 
     metadata = get_metadata(
         package_name="obsloctap",
@@ -52,7 +53,11 @@ async def get_index(
     response_model_exclude_none=True,
     summary="Observation Schedule",
 )
-async def get_schedule() -> list[Obsplan]:
+async def get_schedule(
+    time: int = Query(24, description="hours[1-48] for schedule lookahead"),
+    logger: BoundLogger = Depends(logger_dependency),
+) -> list[Obsplan]:
+    logger.info(f"Schedule requested for time: {time}")
     dbhelp = await DbHelpProvider.getHelper()
-    schedule = await dbhelp.get_schedule()
+    schedule = await dbhelp.get_schedule(time)
     return schedule

@@ -7,11 +7,15 @@ __all__ = ["Schedule24"]
 
 import asyncio
 import logging
+import os
 
 from astropy.time import Time, TimeDelta
+from fast_depends import Depends
 from pandas import DataFrame
 from rubin_sim import __version__ as rubin_sim_version
 from rubin_sim.sim_archive import sim_archive
+from safir.dependencies.logger import logger_dependency
+from structlog import BoundLogger
 
 from obsloctap.db import DbHelpProvider
 from obsloctap.models import Obsplan, spectral_ranges
@@ -19,6 +23,14 @@ from obsloctap.models import Obsplan, spectral_ranges
 texp = TimeDelta("30s")
 tbuffer = TimeDelta("10min")
 t24h = TimeDelta("24hr")
+
+# Configure logging
+log: BoundLogger = (Depends(logger_dependency),)
+rootlog = logging.getLogger()
+if "LOG_LEVEL" in os.environ:
+    rootlog.setLevel(os.environ["LOG_LEVEL"].upper())
+else:
+    rootlog.setLevel("DEBUG")
 
 
 class Schedule24:
@@ -43,7 +55,7 @@ class Schedule24:
         try:
             visits = sim_archive.fetch_obsloctap_visits(nights=2)
         except TypeError:
-            print("Dropping to 1 night")
+            logging.info("Dropping to 1 night")
             visits = sim_archive.fetch_obsloctap_visits(nights=1)
         logging.info(f"Got {len(visits)} for 24 hour schedule")
         if type(visits) is not DataFrame:
@@ -62,6 +74,7 @@ class Schedule24:
             obs.s_ra = v["fieldRA"]
             obs.s_dec = v["fieldDec"]
             time = Time(v["observationStartMJD"], format="mjd")
+            obs.t_planning = time
             obs.t_min = time - tbuffer
             obs.t_max = time + texp + tbuffer
             spectral_range = spectral_ranges[v["band"]]

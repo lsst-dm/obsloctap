@@ -1,5 +1,7 @@
 """Handlers for the app's external root, ``/obsloctap/``."""
 
+import logging
+
 from fastapi import APIRouter, Depends
 from fastapi.params import Query
 from safir.dependencies.logger import logger_dependency
@@ -14,6 +16,10 @@ __all__ = ["get_index", "external_router"]
 
 external_router = APIRouter()
 """FastAPI router for all external handlers."""
+
+# Disable uvicorn logging
+logging.getLogger("uvicorn.access").disabled = True
+logging.getLogger("uvicorn.info").disabled = True
 
 
 @external_router.get(

@@ -7,15 +7,13 @@ __all__ = ["Schedule24"]
 
 import asyncio
 import logging
-import os
+from operator import attrgetter
 
+import structlog
 from astropy.time import Time, TimeDelta
-from fast_depends import Depends
 from pandas import DataFrame
 from rubin_sim import __version__ as rubin_sim_version
 from rubin_sim.sim_archive import sim_archive
-from safir.dependencies.logger import logger_dependency
-from structlog import BoundLogger
 
 from obsloctap.db import DbHelpProvider
 from obsloctap.models import Obsplan, spectral_ranges
@@ -25,12 +23,7 @@ tbuffer = TimeDelta("10min")
 t24h = TimeDelta("24hr")
 
 # Configure logging
-log: BoundLogger = (Depends(logger_dependency),)
-rootlog = logging.getLogger()
-if "LOG_LEVEL" in os.environ:
-    rootlog.setLevel(os.environ["LOG_LEVEL"].upper())
-else:
-    rootlog.setLevel("DEBUG")
+log = structlog.getLogger(__name__)
 
 
 class Schedule24:
@@ -64,6 +57,8 @@ class Schedule24:
 
     # see DMTN-263
     def format_schedule(self, visits: DataFrame) -> list[Obsplan]:
+        """take the datframe from rubin sim and turn it into
+        a sorted list of Obsplan objects"""
         obslist: list[Obsplan] = []
         for ind, v in visits.iterrows():
             obs = Obsplan()
@@ -74,13 +69,18 @@ class Schedule24:
             obs.s_ra = v["fieldRA"]
             obs.s_dec = v["fieldDec"]
             time = Time(v["observationStartMJD"], format="mjd")
-            obs.t_planning = time
+            obs.t_planning = v["observationStartMJD"]
             obs.t_min = time - tbuffer
             obs.t_max = time + texp + tbuffer
             spectral_range = spectral_ranges[v["band"]]
             obs.em_min = spectral_range[0]
             obs.em_max = spectral_range[1]
             obslist.append(obs)
+        obslist.sort(key=attrgetter("t_planning"))
+        log.info(
+            f"Obsplan schedule from {obslist[0].t_planning} to "
+            f"{obslist[-1].t_planning}"
+        )
         return obslist
 
     async def get_update_schedule24(self) -> int:
@@ -92,11 +92,13 @@ class Schedule24:
         visits = self.get_schedule24()
         obsplan = self.format_schedule(visits)
         dbhelp = await DbHelpProvider.getHelper()
+        await dbhelp.remove_flag(obsplan)
+        await dbhelp.mark_old_obs()
         return await dbhelp.insert_obsplan(obsplan)
 
     @staticmethod
     async def do24hs() -> None:
-        """this will get 24h schedule then sleep for 24hrs"""
+        """this will get 24h schedule then sleep for 12hrs"""
         while True:
             await Schedule24().get_update_schedule24()
-            await asyncio.sleep(24 * 60 * 60)
+            await asyncio.sleep(12 * 60 * 60)

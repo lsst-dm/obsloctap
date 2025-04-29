@@ -2,12 +2,14 @@
 
 __all__ = ["DbHelp", "DbHelpProvider", "OBSPLAN_FIELDS"]
 
-import logging
 import os
 from io import StringIO
 from typing import Any, Sequence
 
+import astropy.time
+import structlog
 from pandas import Timedelta, Timestamp
+from sgp4.propagation import false
 from sqlalchemy import Row, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -51,17 +53,9 @@ OBSPLAN_FIELDS = [
 ]
 
 # Configure logging
-log = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-formatter = logging.Formatter(
-    "%(asctime)s [%(name)-12s] %(levelname)-8s %(message)s"
-)
-handler.setFormatter(formatter)
-log.addHandler(handler)
-if "LOG_LEVEL" in os.environ:
-    log.setLevel(os.environ["LOG_LEVEL"].upper())
-else:
-    log.setLevel("DEBUG")
+# log: BoundLogger = (Depends(logger_dependency),)
+log = structlog.getLogger(__name__)
+min30 = astropy.time.TimeDelta("30min")
 
 
 class DbHelp:
@@ -81,7 +75,7 @@ class DbHelp:
 
     def process(self, result: Sequence[Row[Any]]) -> list[Obsplan]:
         """
-        Process the result of the query.
+        Process the result of the query to make a list of Obsplan.
 
         :type self: DbHelp
         :type result: Obsplan[]
@@ -104,7 +98,7 @@ class DbHelp:
 
         whereclause = ""
         if time != 0:
-            window = Timestamp.now() - Timedelta(hours=12)
+            window = Timestamp.now() + Timedelta(hours=time)
             whereclause = f" where t_planning > {window.to_julian_date()}"
 
         statement = (
@@ -113,7 +107,7 @@ class DbHelp:
             f" {whereclause}"
             f" order by t_planning limit  {config.obsplanLimit}"
         )
-        logging.debug(statement)
+        log.debug(statement)
         session = AsyncSession(self.engine)
         result = await session.execute(text(statement))
         obs = result.all()
@@ -138,9 +132,9 @@ class DbHelp:
             f'insert into {self.schema}."{Obsplan.__tablename__}" '
             f"values ({value_str.getvalue()})"
         )
-        logging.debug(stmt)
+        log.debug(stmt)
         result = await session.execute(text(stmt))
-        logging.info(f"Inserted 1 Observation. {result}")
+        log.info(f"Inserted 1 Observation. {result}")
 
     async def insert_obsplan(self, observations: list[Obsplan]) -> int:
         """Insert observations into the DB -
@@ -150,10 +144,107 @@ class DbHelp:
             await self.insert_obs(session, observation)
         await session.commit()
         await session.close()
-        logging.info(
-            f"Inserted and commited {len(observations)} Observations."
-        )
+        log.info(f"Inserted and commited {len(observations)} Observations.")
         return len(observations)
+
+    async def remove_flag(
+        self, observations: list[Obsplan], priority: int = 2
+    ) -> int:
+        """Look at the obsplan table wrt to the new schedule,
+        if there is a new simlr entry remove the existing one,
+        if there is a time with a different entry mark it as not observed.
+        Perhaps one could also delete the not observed ones.
+        Observations should be sorted on t_planning.
+
+        Returns number of entries marked not executed"""
+
+        # oservations are sorted
+        maxt = observations[-1].t_planning
+        mint = observations[0].t_planning
+
+        statement = (
+            f"select {self.insert_fields} from "
+            f'{self.schema}."{Obsplan.__tablename__}"'
+            f" where t_planning between {mint} and {maxt}"
+            f" order by t_planning"
+        )
+        log.debug(statement)
+        session = AsyncSession(self.engine)
+        result = await session.execute(text(statement))
+        oldobs: list[Obsplan] = self.process(result.all())
+        todelete = list()
+        tomark = list()
+        obscount = 0
+        # loop over the old observations and match to new ones
+        for obs in oldobs:
+            notfound = True
+            while notfound:
+                newobs: Obsplan = observations[obscount]
+                if obs.t_planning > newobs.t_max:
+                    # need to look at the next one
+                    obscount = obscount + 1
+                    break
+                if newobs.t_min < obs.t_planning < newobs.t_max:
+                    # same time frame - check other things
+                    # - see dmtn-263 Sc 3.2
+                    if obs.em_min == newobs.em_min:
+                        # its a match so we replace it
+                        todelete.append(obs.t_planning)
+                        notfound = false
+                # anything else is mar it not observed
+                if notfound:
+                    tomark.append(obs.t_planning)
+                notfound = false
+        log.info(f"delete {todelete} \n Mark {tomark}")
+        await self.delete_obs(todelete)
+        await self.mark_obs(tomark)
+        return len(tomark)
+
+    async def mark_old_obs(self) -> None:
+        """Mark old observations `Not observed`
+        if t_planning is in the past and it did
+        not happen  it is not happening.
+        Now if possibly too agressive but 30 minutes shoudl be ok"""
+        session = AsyncSession(self.engine)
+        t: Timestamp = Timestamp.now() + Timedelta(minutes=30)
+        told = t.to_julian_date()
+        stmt = (
+            f'update {self.schema}."{Obsplan.__tablename__}"'
+            f' set execution_status = "Not Observed" '
+            f" where t_planning < {told}"
+        )
+        log.debug(stmt)
+        await session.execute(text(stmt))
+        await session.commit()
+        await session.close()
+
+    async def mark_obs(self, ts: list[float]) -> None:
+        """Not observed"""
+        if not ts or len(ts) == 0:
+            return
+        session = AsyncSession(self.engine)
+        stmt = (
+            f'update {self.schema}."{Obsplan.__tablename__}"'
+            f' set execution_status = "Not Observed" '
+            f" where t_planning in({ts})"
+        )
+        log.debug(stmt)
+        await session.execute(text(stmt))
+        await session.commit()
+        await session.close()
+
+    async def delete_obs(self, ts: list[float]) -> None:
+        if not ts or len(ts) == 0:
+            return
+        session = AsyncSession(self.engine)
+        stmt = (
+            f'delete from {self.schema}."{Obsplan.__tablename__}"'
+            f" where t_planning in ({ts})"
+        )
+        log.debug(stmt)
+        await session.execute(text(stmt))
+        await session.commit()
+        await session.close()
 
     async def tidyup(self, t: float) -> None:
         session = AsyncSession(self.engine)
@@ -161,7 +252,7 @@ class DbHelp:
             f'delete from {self.schema}."{Obsplan.__tablename__}"'
             f" where t_planning = {t}"
         )
-        logging.debug(stmt)
+        log.debug(stmt)
         await session.execute(text(stmt))
         await session.commit()
         await session.close()
@@ -207,7 +298,7 @@ class DbHelpProvider:
                     f"{config.database_password}@"
                     f"{config.database_url}/{config.database}"
                 )
-                logging.info(
+                log.info(
                     f"Creating SQlAlchemy engine with "
                     f"{config.database_user}@{config.database_url}"
                     f"/config.database"
@@ -216,9 +307,9 @@ class DbHelpProvider:
                 engine = create_async_engine(full_url)
                 dbHelper = DbHelp(engine=engine)
                 dbHelper.schema = config.database_schema
-                logging.info("Got engine")
+                log.info("Got engine")
             else:
                 dbHelper = MockDbHelp(None)
-                logging.warning("Using MOCK DB - database_url  env not set.")
+                log.warning("Using MOCK DB - database_url  env not set.")
 
         return dbHelper

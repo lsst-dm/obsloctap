@@ -13,6 +13,7 @@ class TestSchedule(unittest.TestCase):
         obs = Schedule24().format_schedule(visits)
         self.assertEqual(len(obs), len(visits), "Not all entries")
         self.assertGreaterEqual(len(obs), 10, "Not enough entries")
+        self.assertGreater(obs[0].t_planning, 0, "t_planning should not be 0")
 
 
 python_classes = "TestCase"

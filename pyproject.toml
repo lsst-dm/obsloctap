@@ -92,6 +92,7 @@ asyncio_mode = "strict"
 # with complex data structures rather than only the assert message) in files
 # listed in python_files.
 python_files = ["tests/*.py", "tests/*/*.py"]
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.mypy]
 disallow_untyped_defs = true

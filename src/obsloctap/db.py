@@ -208,9 +208,10 @@ class DbHelp:
         session = AsyncSession(self.engine)
         t: Timestamp = Timestamp.now() + Timedelta(minutes=30)
         told = t.to_julian_date()
+        nob = "'Not Observed'"
         stmt = (
             f'update {self.schema}."{Obsplan.__tablename__}"'
-            f' set execution_status = "Not Observed" '
+            f" set execution_status = {nob} "
             f" where t_planning < {told}"
         )
         log.debug(stmt)

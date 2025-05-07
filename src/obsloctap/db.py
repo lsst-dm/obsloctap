@@ -91,21 +91,25 @@ class DbHelp:
 
     async def get_schedule(self, time: float = 0) -> list[Obsplan]:
         """Return the latest schedule item from the DB.
-        We should consider how much that is.. 24 hours worth?
-        if time is zero we just take top obsplanLimit rows."""
+         time is a number of hours from now for how much schedule to return
+        if time is zero we just take top obsplanLimit(1000) rows."""
 
         config = Configuration()
 
         whereclause = ""
         if time != 0:
-            window = Timestamp.now() + Timedelta(hours=time)
-            whereclause = f" where t_planning > {window.to_julian_date()}"
+            now = Timestamp.now()
+            window = now + Timedelta(hours=time)
+            whereclause = (
+                f" where t_planning between  "
+                f"{now.to_julian_date()} AND {window.to_julian_date()}"
+            )
 
         statement = (
             f"select {self.insert_fields} from "
             f'{self.schema}."{Obsplan.__tablename__}"'
             f" {whereclause}"
-            f" order by t_planning limit  {config.obsplanLimit}"
+            f" order by t_planning DESC limit  {config.obsplanLimit}"
         )
         log.debug(statement)
         session = AsyncSession(self.engine)
@@ -134,7 +138,7 @@ class DbHelp:
         )
         log.debug(stmt)
         result = await session.execute(text(stmt))
-        log.info(f"Inserted 1 Observation. {result}")
+        log.debug(result)
 
     async def insert_obsplan(self, observations: list[Obsplan]) -> int:
         """Insert observations into the DB -
@@ -166,7 +170,7 @@ class DbHelp:
             f"select {self.insert_fields} from "
             f'{self.schema}."{Obsplan.__tablename__}"'
             f" where t_planning between {mint} and {maxt}"
-            f" order by t_planning"
+            f" order by t_planning DESC"
         )
         log.debug(statement)
         session = AsyncSession(self.engine)
@@ -202,17 +206,18 @@ class DbHelp:
 
     async def mark_old_obs(self) -> None:
         """Mark old observations `Not observed`
-        if t_planning is in the past and it did
-        not happen  it is not happening.
-        Now if possibly too agressive but 30 minutes shoudl be ok"""
+        if t_planning is in the past and it is still scheduled
+        it is not happening.
+        Now if possibly too aggressive but 30 minutes should be ok"""
         session = AsyncSession(self.engine)
         t: Timestamp = Timestamp.now() + Timedelta(minutes=30)
         told = t.to_julian_date()
         nob = "'Not Observed'"
+        sched = "'Scheduled'"
         stmt = (
             f'update {self.schema}."{Obsplan.__tablename__}"'
             f" set execution_status = {nob} "
-            f" where t_planning < {told}"
+            f" where t_planning < {told} AND execution_status = {sched} "
         )
         log.debug(stmt)
         await session.execute(text(stmt))

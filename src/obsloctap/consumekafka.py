@@ -73,9 +73,12 @@ async def consume() -> None:
         await consumer.stop()
 
 
-print("doing24hs")
 runner = asyncio.Runner()
-runner.run(Schedule24.do24hs())
+try:
+    runner.run(Schedule24.do24hs())
+except Exception as e:
+    log.error(e)
+
 print("now kafka")
 runner.run(consume())
 runner.close()

@@ -70,8 +70,8 @@ class Schedule24:
             obs.s_dec = v["fieldDec"]
             time = Time(v["observationStartMJD"], format="mjd")
             obs.t_planning = v["observationStartMJD"]
-            obs.t_min = time - tbuffer
-            obs.t_max = time + texp + tbuffer
+            obs.t_min = (time - tbuffer).to_value("mjd", "float")
+            obs.t_max = (time + texp + tbuffer).to_value("mjd", "float")
             spectral_range = spectral_ranges[v["band"]]
             obs.em_min = spectral_range[0]
             obs.em_max = spectral_range[1]
@@ -79,7 +79,7 @@ class Schedule24:
         obslist.sort(key=attrgetter("t_planning"))
         log.info(
             f"Obsplan schedule from {obslist[0].t_planning} to "
-            f"{obslist[-1].t_planning}"
+            f"{obslist[-1].t_planning} - with {len(obslist)} entries."
         )
         return obslist
 
@@ -101,4 +101,6 @@ class Schedule24:
         """this will get 24h schedule then sleep for 12hrs"""
         while True:
             await Schedule24().get_update_schedule24()
-            await asyncio.sleep(12 * 60 * 60)
+            stime = 12 * 60 * 60
+            log.info("24h schedule getter sleeping for {stime} seconds")
+            await asyncio.sleep(stime)

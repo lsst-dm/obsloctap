@@ -20,6 +20,7 @@ external_router = APIRouter()
 # Disable uvicorn logging
 logging.getLogger("uvicorn.access").disabled = True
 logging.getLogger("uvicorn.info").disabled = True
+logging.getLogger("uvicorn.event").disabled = True
 
 
 @external_router.get(

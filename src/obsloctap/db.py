@@ -185,7 +185,7 @@ class DbHelp:
             while notfound:
                 newobs: Obsplan = observations[obscount]
                 if obs.t_planning > newobs.t_max:
-                    # need to look at the next one
+                    # need to look at the next one this is not a match
                     obscount = obscount + 1
                     break
                 if newobs.t_min < obs.t_planning < newobs.t_max:

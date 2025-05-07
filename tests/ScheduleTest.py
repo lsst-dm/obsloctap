@@ -14,6 +14,9 @@ class TestSchedule(unittest.TestCase):
         self.assertEqual(len(obs), len(visits), "Not all entries")
         self.assertGreaterEqual(len(obs), 10, "Not enough entries")
         self.assertGreater(obs[0].t_planning, 0, "t_planning should not be 0")
+        self.assertGreater(
+            obs[0].t_planning, obs[0].t_min, "t_planning should be >t_min"
+        )
 
 
 python_classes = "TestCase"

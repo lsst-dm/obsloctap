@@ -3,55 +3,110 @@
 
 from __future__ import annotations
 
+import os
+import unittest
+
+import pandas as pd
 import pytest
-from pandas import Timestamp
+from astropy.time import Time
 
-from obsloctap.db import OBSPLAN_FIELDS, DbHelpProvider, MockDbHelp
+from obsloctap.db import OBSPLAN_FIELDS, DbHelp
 from obsloctap.models import Obsplan
+from obsloctap.schedule24h import Schedule24
+from tests.DBmock import SqliteDbHelp
 
 
-@pytest.mark.asyncio
-async def test_insert() -> None:
-    dbhelp = await DbHelpProvider().getHelper()
-    if isinstance(dbhelp, MockDbHelp):
-        print("Not running DB test - got Mock DB")
-        return
+class TestDB(unittest.IsolatedAsyncioTestCase):
 
-    plan = Obsplan()
-    now: float = Timestamp.now().to_julian_date()
-    plan.t_planning = now
-    plan.s_ra = 90.90909091666666
-    plan.s_dec = -74.60384434722222
-    plan.rubin_nexp = 3
-    plan.rubin_rot_sky_pos = 18.33895879413964
-    plan.obs_id = "OBS_1"
-    plan.t_min = 30
-    plan.t_max = 30
-    plan.t_exptime = 30
-    plan.instrument_name = "TESTCam"
-    plan.category = "Fixed"
-    plan.execution_status = "Scheduled"
-    plan.priority = 1
-    plan.target_name = "TEST"
-    plan.obs_collection = "TEST"
-    plan.s_region = "TEST"
-    plan.em_res_power = 1.5
-    plan.em_max = 2
-    plan.em_min = 1
-    plan.pol_xel = 1
-    plan.pol_states = "TEST"
-    plan.t_plan_exptime = 30
+    async def asyncSetUp(self) -> None:
+        os.environ["database_url"] = ":memory:"
+        os.environ["database_schema"] = ""
 
-    count = await dbhelp.insert_obsplan([plan])
-    assert 1 == count
+    async def asyncTearDown(self) -> None:
+        os.environ["database_url"] = ""
 
-    # now get it back
-    plans = await dbhelp.get_schedule(time=100)
+    @staticmethod
+    async def setup_db() -> DbHelp:
+        os.environ["database_url"] = ":memory:"
+        os.environ["database_schema"] = ""
+        lite = SqliteDbHelp()
+        dbhelp = await SqliteDbHelp.getSqlLite()
+        await lite.setup_schema()
+        return dbhelp
 
-    await dbhelp.tidyup(now)
+    @pytest.mark.asyncio
+    async def test_insert(self) -> None:
+        dbhelp = await TestDB.setup_db()
 
-    assert len(plans) >= 1
+        plan = Obsplan()
+        now: float = Time.now().to_value("mjd")
+        plan.t_planning = now
+        plan.s_ra = 90.90909091666666
+        plan.s_dec = -74.60384434722222
+        plan.rubin_nexp = 3
+        plan.rubin_rot_sky_pos = 18.33895879413964
+        plan.obs_id = "OBS_1"
+        plan.t_min = 30
+        plan.t_max = 30
+        plan.t_exptime = 30
+        plan.instrument_name = "TESTCam"
+        plan.category = "Fixed"
+        plan.execution_status = "Scheduled"
+        plan.priority = 1
+        plan.target_name = "TEST"
+        plan.obs_collection = "TEST"
+        plan.s_region = "TEST"
+        plan.em_res_power = 1.5
+        plan.em_max = 2
+        plan.em_min = 1
+        plan.pol_xel = 1
+        plan.pol_states = "TEST"
+        plan.t_plan_exptime = 30
 
-    outplan = plans[len(plans) - 1]
-    for key in OBSPLAN_FIELDS:
-        assert plan.__dict__[key] == outplan.__dict__[key]
+        count = await dbhelp.insert_obsplan([plan])
+        assert 1 == count
+
+        # now get it back
+        plans = await dbhelp.get_schedule(time=0)
+
+        await dbhelp.tidyup(now)
+        assert len(plans) >= 1
+
+        outplan = plans[len(plans) - 1]
+        for key in OBSPLAN_FIELDS:
+            assert plan.__dict__[key] == outplan.__dict__[key]
+
+    @pytest.mark.asyncio
+    async def test_insert_schedule(self) -> None:
+        dbhelp = await TestDB.setup_db()
+        visits = pd.read_pickle("tests/schedule24rs.pkl")
+        obsplan = Schedule24().format_schedule(visits)
+        await dbhelp.remove_flag(obsplan)
+        await dbhelp.mark_old_obs()
+        count = await dbhelp.insert_obsplan(obsplan)
+        assert count == len(visits)
+        plans = await dbhelp.get_schedule(
+            time=0
+        )  # should get all in this case
+        self.assertEqual(
+            len(plans),
+            len(visits),
+            "Did not get correct number of vists from get schedule",
+        )
+
+        plans_time = await dbhelp.get_schedule(
+            time=48, start=Time(obsplan[-2].t_planning, format="mjd")
+        )  # should get 1 less than all of them ..
+        self.assertEqual(
+            len(plans_time),
+            len(visits) - 1,
+            "Did not get correct number of vists from get schedule",
+        )
+
+        # just check one round trips
+        outplan = plans[len(plans) - 1]
+        for plan in obsplan:  # find the original
+            if plan.t_planning == outplan.t_planning:
+                break
+        for key in OBSPLAN_FIELDS:
+            assert plan.__dict__[key] == outplan.__dict__[key]

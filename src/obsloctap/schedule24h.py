@@ -15,6 +15,7 @@ from pandas import DataFrame
 from rubin_sim import __version__ as rubin_sim_version
 from rubin_sim.sim_archive import sim_archive
 
+from obsloctap.config import Configuration
 from obsloctap.db import DbHelpProvider
 from obsloctap.models import Obsplan, spectral_ranges
 
@@ -33,6 +34,7 @@ class Schedule24:
         :return: None
         """
         self.last = Time.now() - t24h
+        self.count = 1
 
     def get_schedule24(self) -> DataFrame:
         """
@@ -76,7 +78,7 @@ class Schedule24:
             obs.em_min = spectral_range[0]
             obs.em_max = spectral_range[1]
             obslist.append(obs)
-        obslist.sort(key=attrgetter("t_planning"))
+        obslist.sort(key=attrgetter("t_planning"), reverse=True)
         log.info(
             f"Obsplan schedule from {obslist[0].t_planning} to "
             f"{obslist[-1].t_planning} - with {len(obslist)} entries."
@@ -96,11 +98,18 @@ class Schedule24:
         await dbhelp.mark_old_obs()
         return await dbhelp.insert_obsplan(obsplan)
 
-    @staticmethod
-    async def do24hs() -> None:
-        """this will get 24h schedule then sleep for 12hrs"""
-        while True:
-            await Schedule24().get_update_schedule24()
-            stime = 12 * 60 * 60
-            log.info("24h schedule getter sleeping for {stime} seconds")
+    async def do24hs(self, stopafter: int = 0) -> None:
+        """this will get 24h schedule then sleep for config.sleeptime or 12hrs
+        it never exits .."""
+        config = Configuration()
+        # config hours - sleep is in seconds
+        stime = config.sleeptime * 60 * 60
+        # this will be tru always unless we pass in a number which is for test
+        while stopafter != self.count:
+            await self.get_update_schedule24()
+            self.count = self.count + 1
+            log.info(
+                f"24h schedule getter sleeping for {stime} seconds. "
+                f"{self.count} runs."
+            )
             await asyncio.sleep(stime)

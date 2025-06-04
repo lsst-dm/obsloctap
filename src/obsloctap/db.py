@@ -6,8 +6,8 @@ import os
 from io import StringIO
 from typing import Any, Sequence
 
-import astropy.time
 import structlog
+from astropy.time import Time, TimeDelta
 from pandas import Timedelta, Timestamp
 from sgp4.propagation import false
 from sqlalchemy import Row, text
@@ -55,7 +55,7 @@ OBSPLAN_FIELDS = [
 # Configure logging
 # log: BoundLogger = (Depends(logger_dependency),)
 log = structlog.getLogger(__name__)
-min30 = astropy.time.TimeDelta("30min")
+min30 = TimeDelta("30min")
 
 
 class DbHelp:
@@ -73,6 +73,9 @@ class DbHelp:
         self.schema = ""
         self.insert_fields = ",".join(OBSPLAN_FIELDS)
 
+    def get_session(self) -> AsyncSession:
+        return AsyncSession(self.engine)
+
     def process(self, result: Sequence[Row[Any]]) -> list[Obsplan]:
         """
         Process the result of the query to make a list of Obsplan.
@@ -89,32 +92,42 @@ class DbHelp:
             obslist.append(obs)
         return obslist
 
-    async def get_schedule(self, time: float = 0) -> list[Obsplan]:
+    async def get_schedule(
+        self, time: float = 0, start: Time | None = None
+    ) -> list[Obsplan]:
         """Return the latest schedule item from the DB.
-         time is a number of hours from now for how much schedule to return
+         time is a number of hours from start for how much schedule to return
+         if no start is provided now in UTC is assumed
         if time is zero we just take top obsplanLimit(1000) rows."""
 
         config = Configuration()
 
         whereclause = ""
+
         if time != 0:
-            now = Timestamp.now()
-            window = now + Timedelta(hours=time)
+            now = start if start else Time.now("UTC")
+            startmjd = now.to_value("mjd")
+            td = Timedelta(hours=time)
+            win = now + td
+            window = win.to_value("mjd")
+
             whereclause = (
-                f" where t_planning between  "
-                f"{now.to_julian_date()} AND {window.to_julian_date()}"
+                f" where t_planning between  " f"{startmjd} AND {window}"
             )
 
         statement = (
             f"select {self.insert_fields} from "
-            f'{self.schema}."{Obsplan.__tablename__}"'
+            f'{self.schema}"{Obsplan.__tablename__}"'
             f" {whereclause}"
             f" order by t_planning DESC limit  {config.obsplanLimit}"
         )
-        log.debug(statement)
+        log.debug(f"get_schedule: {statement}")
         session = AsyncSession(self.engine)
         result = await session.execute(text(statement))
         obs = result.all()
+        log.debug(f"Got scedule with {len(obs)} elements")
+        if len(obs) == 0 and time != 0:
+            log.info(f"No observations between {startmjd}" f"and {window}")
         await session.close()
         return self.process(obs)
 
@@ -133,12 +146,11 @@ class DbHelp:
                 value_str.write(",")
 
         stmt = (
-            f'insert into {self.schema}."{Obsplan.__tablename__}" '
+            f'insert into {self.schema}"{Obsplan.__tablename__}" '
             f"values ({value_str.getvalue()})"
         )
-        log.debug(stmt)
-        result = await session.execute(text(stmt))
-        log.debug(result)
+        # log.debug(stmt)
+        await session.execute(text(stmt))
 
     async def insert_obsplan(self, observations: list[Obsplan]) -> int:
         """Insert observations into the DB -
@@ -168,11 +180,11 @@ class DbHelp:
 
         statement = (
             f"select {self.insert_fields} from "
-            f'{self.schema}."{Obsplan.__tablename__}"'
+            f'{self.schema}"{Obsplan.__tablename__}"'
             f" where t_planning between {mint} and {maxt}"
             f" order by t_planning DESC"
         )
-        log.debug(statement)
+        log.debug(f"remove_flag: {statement}")
         session = AsyncSession(self.engine)
         result = await session.execute(text(statement))
         oldobs: list[Obsplan] = self.process(result.all())
@@ -180,14 +192,11 @@ class DbHelp:
         tomark = list()
         obscount = 0
         # loop over the old observations and match to new ones
+        # both lists in descending order
         for obs in oldobs:
             notfound = True
             while notfound:
                 newobs: Obsplan = observations[obscount]
-                if obs.t_planning > newobs.t_max:
-                    # need to look at the next one this is not a match
-                    obscount = obscount + 1
-                    break
                 if newobs.t_min < obs.t_planning < newobs.t_max:
                     # same time frame - check other things
                     # - see dmtn-263 Sc 3.2
@@ -195,8 +204,14 @@ class DbHelp:
                         # its a match so we replace it
                         todelete.append(obs.t_planning)
                         notfound = false
-                # anything else is mar it not observed
-                if notfound:
+                if obs.t_planning < newobs.t_min:
+                    # need to look at the next one this is not a match
+                    obscount = obscount + 1
+                    break
+                # anything else is mark it not observed
+                # the lists are sorted so if the currect observation is alread
+                # newer than this one its newer than te rest
+                if notfound or obs.t_planning > newobs.t_max:
                     tomark.append(obs.t_planning)
                 notfound = false
         log.info(f"delete {todelete} \n Mark {tomark}")
@@ -215,11 +230,11 @@ class DbHelp:
         nob = "'Not Observed'"
         sched = "'Scheduled'"
         stmt = (
-            f'update {self.schema}."{Obsplan.__tablename__}"'
+            f'update {self.schema}"{Obsplan.__tablename__}"'
             f" set execution_status = {nob} "
             f" where t_planning < {told} AND execution_status = {sched} "
         )
-        log.debug(stmt)
+        log.debug(f"mark_old_obs: {stmt}")
         await session.execute(text(stmt))
         await session.commit()
         await session.close()
@@ -230,11 +245,11 @@ class DbHelp:
             return
         session = AsyncSession(self.engine)
         stmt = (
-            f'update {self.schema}."{Obsplan.__tablename__}"'
+            f'update {self.schema}"{Obsplan.__tablename__}"'
             f' set execution_status = "Not Observed" '
             f" where t_planning in({ts})"
         )
-        log.debug(stmt)
+        log.debug(f"mark_obs: {stmt}")
         await session.execute(text(stmt))
         await session.commit()
         await session.close()
@@ -244,7 +259,7 @@ class DbHelp:
             return
         session = AsyncSession(self.engine)
         stmt = (
-            f'delete from {self.schema}."{Obsplan.__tablename__}"'
+            f'delete from {self.schema}"{Obsplan.__tablename__}"'
             f" where t_planning in ({ts})"
         )
         log.debug(stmt)
@@ -255,7 +270,7 @@ class DbHelp:
     async def tidyup(self, t: float) -> None:
         session = AsyncSession(self.engine)
         stmt = (
-            f'delete from {self.schema}."{Obsplan.__tablename__}"'
+            f'delete from {self.schema}"{Obsplan.__tablename__}"'
             f" where t_planning = {t}"
         )
         log.debug(stmt)
@@ -267,7 +282,9 @@ class DbHelp:
 class MockDbHelp(DbHelp):
     obslist = list[Obsplan]()
 
-    async def get_schedule(self, time: float = 0) -> list[Obsplan]:
+    async def get_schedule(
+        self, time: float = 0, start: Time | None = None
+    ) -> list[Obsplan]:
         log.warning("Using MOCKDBHelp")
         observations = []
         obs = Obsplan()
@@ -289,31 +306,53 @@ dbHelper: DbHelp | None = None
 
 
 class DbHelpProvider:
+
+    @staticmethod
+    def clear() -> None:
+        os.environ["database_url"] = ""
+        global dbHelper
+        dbHelper = None
+
     @staticmethod
     async def getHelper() -> DbHelp:
         """
-        :return: EfdHelp the helper
+        :return: DbHelp the helper
         """
         global dbHelper
         if dbHelper is None:
-            if "database_url" in os.environ:
+            if (
+                "database_url" in os.environ
+                and os.environ["database_url"] != ""
+            ):
                 config = Configuration()
+                driver = "postgresql+asyncpg"
                 full_url = (
-                    f"postgresql+asyncpg"
-                    f"://{config.database_user}:"  # noqa: E231
+                    f"{driver}://{config.database_user}:"  # noqa: E231
                     f"{config.database_password}@"
                     f"{config.database_url}/{config.database}"
                 )
-                log.info(
-                    f"Creating SQlAlchemy engine with "
-                    f"{config.database_user}@{config.database_url}"
-                    f"/config.database"
-                    f" and schema: {config.database_schema}."
-                )
+                if "memory" in config.database_url:
+                    driver = "sqlite+aiosqlite"
+                    full_url = (
+                        f"{driver}:///file:obloctabdb"  # noqa: E231
+                        "?mode=memory&cache=shared&uri=true"  # noqa: E231
+                    )
+                    log.info(f"Creating SQlAlchemy engine with " f"{full_url}")
+                else:
+                    log.info(
+                        f"Creating SQlAlchemy engine with "
+                        f"{config.database_user}@{config.database_url}"
+                        f"/config.database"
+                        f" and schema: {config.database_schema}."
+                    )
                 engine = create_async_engine(full_url)
                 dbHelper = DbHelp(engine=engine)
                 dbHelper.schema = config.database_schema
-                log.info("Got engine")
+                if len(dbHelper.schema) > 0 and not dbHelper.schema.endswith(
+                    "."
+                ):
+                    dbHelper.schema = f"{dbHelper.schema}."
+                log.info(f"Got engine schema='{dbHelper.schema}'")
             else:
                 dbHelper = MockDbHelp(None)
                 log.warning("Using MOCK DB - database_url  env not set.")

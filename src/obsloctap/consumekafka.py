@@ -75,7 +75,7 @@ async def consume() -> None:
 
 runner = asyncio.Runner()
 try:
-    runner.run(Schedule24.do24hs())
+    runner.run(sched24.do24hs())
 except Exception as e:
     log.error(e)
 

@@ -78,6 +78,12 @@ class Configuration(BaseSettings):
         env="obsplanTimeSpan",
     )
 
+    sleeptime: float = Field(
+        12,
+        title="Hours to sleep before getting 24 hour scheulde again",
+        env="sleeptime",
+    )
+
 
 config = Configuration()
 """Configuration for obsloctap."""

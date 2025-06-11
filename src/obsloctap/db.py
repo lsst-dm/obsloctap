@@ -6,9 +6,9 @@ import os
 from io import StringIO
 from typing import Any, Sequence
 
+import astropy.units as u
 import structlog
 from astropy.time import Time, TimeDelta
-from pandas import Timedelta, Timestamp
 from sgp4.propagation import false
 from sqlalchemy import Row, text
 from sqlalchemy.ext.asyncio import (
@@ -105,9 +105,9 @@ class DbHelp:
         whereclause = ""
 
         if time != 0:
-            now = start if start else Time.now("UTC")
+            now = start if start else Time.now()
             startmjd = now.to_value("mjd")
-            td = Timedelta(hours=time)
+            td = TimeDelta(time * u.hr)
             win = now + td
             window = win.to_value("mjd")
 
@@ -225,8 +225,8 @@ class DbHelp:
         it is not happening.
         Now if possibly too aggressive but 30 minutes should be ok"""
         session = AsyncSession(self.engine)
-        t: Timestamp = Timestamp.now() + Timedelta(minutes=30)
-        told = t.to_julian_date()
+        t: Time = Time.now() + TimeDelta(30 * u.min)
+        told = t.to_value("mjd")
         nob = "'Not Observed'"
         sched = "'Scheduled'"
         stmt = (

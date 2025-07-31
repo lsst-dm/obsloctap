@@ -77,3 +77,17 @@ class Obsplan(BaseModel):
     # NOT in Obsplan
     rubin_nexp: int = 1  # usually 1,
     # logevent_predictedSchedule.nexp NOT in Obsplan
+
+
+class Exposure(BaseModel):
+    """this is to hold the consdb results - its not all cols"""
+
+    exposure_id: int
+    obs_start_mjd: float
+    obs_end_mjd: float
+    physical_filter: str
+    s_ra: float
+    s_dec: float
+    target_name: str
+    science_program: str
+    scheduler_note: str

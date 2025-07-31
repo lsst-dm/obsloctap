@@ -84,6 +84,36 @@ class Configuration(BaseSettings):
         env="sleeptime",
     )
 
+    consdb_database: str = Field(
+        "consdb",
+        title="COnsdb postgres database name",
+        env="consdb_database",
+    )
+
+    consdb_url: str = Field(
+        "usdf-summitdb-replica.slac.stanford.edu:5432",
+        title="URL for postgres database",
+        env="consdb_url",
+    )
+
+    consdb_username: str = Field(
+        "usdf",
+        title="Consdb user for postgres database",
+        env="consdb_username",
+    )
+
+    consdb_password: str = Field(
+        "",
+        title="Consdb password for postgres database",
+        env="consdb_password",
+    )
+
+    consdb_schema: str = Field(
+        "cdb_lsstcam",
+        title="Schema for consdb postgres database",
+        env="consdb_schema",
+    )
+
 
 config = Configuration()
 """Configuration for obsloctap."""

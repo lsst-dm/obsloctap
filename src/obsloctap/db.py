@@ -1,4 +1,4 @@
-"""Helper for the efd -so it may be mocked in test."""
+"""Helper for the database -so it may be mocked in test."""
 
 __all__ = ["DbHelp", "DbHelpProvider", "OBSPLAN_FIELDS"]
 

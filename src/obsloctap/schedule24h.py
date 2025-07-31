@@ -60,11 +60,12 @@ class Schedule24:
     # see DMTN-263
     def format_schedule(self, visits: DataFrame) -> list[Obsplan]:
         """take the datframe from rubin sim and turn it into
-        a sorted list of Obsplan objects"""
+        a sorted list of Obsplan objects
+        see also rtn-096"""
         obslist: list[Obsplan] = []
         for ind, v in visits.iterrows():
             obs = Obsplan()
-            obs.target_name = v["target_name"]
+            obs.target_name = v["target_name"]  # shoudl be scheduler_note
             obs.obs_id = v["target_name"]
             obs.priority = 2
             obs.execution_status = "Scheduled"

@@ -3,8 +3,9 @@ import pickle
 import unittest
 
 import pytest
+from sqlalchemy import text
 
-from src.obsloctap.consdb import ConsDbHelp, ConsDbHelpProvider
+from src.obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
 from tests.DBmock import SqliteDbHelp
 
 
@@ -28,7 +29,7 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
         await lite.setup_consdb_schema()
         return dbhelp
 
-    async def test_process(self):
+    async def test_process(self) -> None:
         # Load data from pickle file for testing
         with open("tests/consdb.pkl", "rb") as f:
             exposures = pickle.load(f)
@@ -37,9 +38,12 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
         # there are some pinholes whihc were marked on sky with no RA DEC
         self.assertEqual(536, len(exps))
 
-    async def test_get_exposures_between(self):
+    async def test_get_exposures_between(self) -> None:
         # Example test: should return data loaded from consdb.pkl
         helper = await TestConsdb.setup_db()
+        s = helper.get_session()
+        res = await s.execute(text("select count(*) from exposure"))
+        print(res.fetchone())
         # mjd
         # start = 60858.98263978243
         # skip 2
@@ -47,4 +51,5 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
         end = 60859.98263978243
         exposures = await helper.get_exposures_between(start, end)
         assert isinstance(exposures, list)
-        assert 536 == len(exposures)
+        # two less than we loaded
+        assert 534 == len(exposures)

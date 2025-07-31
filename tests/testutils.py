@@ -1,7 +1,7 @@
 import asyncio
 import sys
 
-from obsloctap.consdb import ConsDbHelp, ConsDbHelpProvider
+from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
 from obsloctap.schedule24h import Schedule24
 from tests.ScheduleTest import MockSchedule
 

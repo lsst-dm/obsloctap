@@ -1,4 +1,6 @@
-# consdb.py
+# consdbhelp.py
+
+__all__ = ["ConsDbHelp", "ConsDbHelpProvider", "EXPOSURE_FIELDS"]
 
 from typing import Any, Sequence
 
@@ -50,12 +52,13 @@ class ConsDbHelp:
                     f"Exposure {data['exposure_id']} has no "
                     f"RA and/or DEC \n {data}"
                 )
-            try:
-                exposures.append(Exposure(**data))
-            except ValidationError as e:
-                log.warning(
-                    "Exposure validation failed", error=str(e), data=data
-                )
+            else:
+                try:
+                    exposures.append(Exposure(**data))
+                except ValidationError as e:
+                    log.warning(
+                        "Exposure validation failed", error=str(e), data=data
+                    )
 
         return exposures
 

@@ -4,7 +4,7 @@ import pickle
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import text
 
-from obsloctap.consdb import ConsDbHelp, ConsDbHelpProvider
+from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
 from obsloctap.db import DbHelp, DbHelpProvider
 
 __all__ = ["SqliteDbHelp"]
@@ -25,6 +25,20 @@ CREATE TABLE exposure (
     can_see_sky INTEGER DEFAULT 1
 );
 """
+
+columns_types = {
+    "exposure_id": int,
+    "obs_start_mjd": float,
+    "obs_end_mjd": float,
+    "band": str,
+    "physical_filter": str,
+    "s_ra": float,
+    "s_dec": float,
+    "target_name": str,
+    "science_program": str,
+    "scheduler_note": str,
+    "can_see_sky": int,
+}
 
 
 class SqliteDbHelp:
@@ -79,7 +93,7 @@ class SqliteDbHelp:
                 physical_filter, s_ra, s_dec,
                 target_name, science_program, scheduler_note
             ) VALUES (
-                :exposure_id, :obs_start_mjd, :obs_end_mjd, band:,
+                :exposure_id, :obs_start_mjd, :obs_end_mjd, :band,
                 :physical_filter, :s_ra, :s_dec,
                 :target_name, :science_program, :scheduler_note
             )
@@ -87,9 +101,14 @@ class SqliteDbHelp:
         )
 
         for exp in exposures:
-            print(f"{exp['expousure_id']}")
-            res = await conn.execute(insert_sql, exp)
-            print(res)
+            exp_dict = {}
+            for col, typ in columns_types.items():
+                val = exp.get(col)
+                if val is not None:
+                    exp_dict[col] = typ(val)
+                else:
+                    exp_dict[col] = None
+            await conn.execute(insert_sql, exp_dict)
         await conn.commit()
 
     @staticmethod

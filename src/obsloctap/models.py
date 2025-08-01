@@ -96,6 +96,7 @@ class Exposure(BaseModel):
     exposure_id: int
     obs_start_mjd: float
     obs_end_mjd: float
+    band: str
     physical_filter: str
     s_ra: float
     s_dec: float

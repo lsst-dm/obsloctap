@@ -95,6 +95,12 @@ class Configuration(BaseSettings):
         env="sleeptime",
     )
 
+    exp_sleeptime: float = Field(
+        2,
+        title="Minutes to sleep before looking for exposures to update plan",
+        env="exp_sleeptime",
+    )
+
     consdb_database: str = Field(
         "consdb",
         title="COnsdb postgres database name",

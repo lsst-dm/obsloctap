@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from obsloctap.models import Obsplan
+from obsloctap.models import Exposure, Obsplan, spectral_ranges
 
 from .config import Configuration
 
@@ -174,6 +174,47 @@ class DbHelp:
         log.info(f"Inserted and commited {len(observations)} Observations.")
         return len(observations)
 
+    async def update_entries(
+        self, exposures: list[Exposure], tol: float = 1
+    ) -> int:
+        """
+        Update obsplan entries that match exposures by s_ra, s_dec,
+        and obs_start_mjd in [t_min, t_max].
+        tol: tolerances for matching s_ra and s_dec.
+        Returns the number of updated entries.
+        """
+        session = AsyncSession(self.engine)
+        updated = 0
+        for exp in exposures:
+            # Find matching obsplan entries
+            stmt = (
+                f'SELECT * FROM {self.schema}"{Obsplan.__tablename__}" '
+                f"WHERE ABS(s_ra - {exp.s_ra}) < {tol} "
+                f"AND ABS(s_dec - {exp.s_dec}) < {tol} "
+                f"AND t_min <= {exp.obs_start_mjd} AND "
+                f"t_max >= {exp.obs_start_mjd}"
+            )
+            result = await session.execute(text(stmt))
+            matches = result.fetchall()
+            for match in matches:
+                # Example: update execution_status to 'Updated'
+                update_stmt = (
+                    f'UPDATE {self.schema}"{Obsplan.__tablename__}" '
+                    f"SET execution_status = 'Performed', "
+                    f"target_name = '{exp.target_name}', "
+                    f"obs_collection = '{exp.exposure_id}| "
+                    f"{exp.science_program}| {exp.scheduler_note}', "
+                    f"em_min = '{spectral_ranges[exp.band][0]}', "
+                    f"em_max = '{spectral_ranges[exp.band][1]}', "
+                    f"t_min = {exp.obs_start_mjd}, "
+                    f"t_max = {exp.obs_end_mjd} "
+                    f"WHERE obs_id = '{match.obs_id}'"
+                )
+                await session.execute(text(update_stmt))
+                updated += 1
+        await session.commit()
+        return updated
+
     async def remove_flag(
         self, observations: list[Obsplan], priority: int = 2
     ) -> int:
@@ -229,6 +270,22 @@ class DbHelp:
         await self.delete_obs(todelete)
         await self.mark_obs(tomark)
         return len(tomark)
+
+    async def find_oldest_obs(self) -> float:
+        """Look for entries with t_planning  in the past and it is still
+        scheduled, the oldes one will give the start time to seach for
+        expoosures end time can be now
+        """
+        session = AsyncSession(self.engine)
+        statement = (
+            f"select min(t_planning) as t from "
+            f'{self.schema}"{Obsplan.__tablename__}"'
+            f" where execution_status = 'Scheduled' "
+        )
+        res = await session.execute(text(statement))
+        val = res.fetchone()[0]
+        await session.close()
+        return val
 
     async def mark_old_obs(self) -> None:
         """Mark old observations `Not observed`

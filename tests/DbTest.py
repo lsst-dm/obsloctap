@@ -13,6 +13,7 @@ from astropy.time import Time
 from obsloctap.db import OBSPLAN_FIELDS, DbHelp
 from obsloctap.models import Obsplan
 from obsloctap.schedule24h import Schedule24
+from tests.ConsdbTest import TestConsdb
 from tests.DBmock import SqliteDbHelp
 
 
@@ -110,3 +111,34 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
                 break
         for key in OBSPLAN_FIELDS:
             assert plan.__dict__[key] == outplan.__dict__[key]
+
+    @pytest.mark.asyncio
+    async def test_update_entries(self) -> None:
+        dbhelp = await TestDB.setup_db()
+        visits = pd.read_pickle("tests/schedule24rs.pkl")
+        obsplan = Schedule24().format_schedule(visits)
+        await dbhelp.insert_obsplan(obsplan)
+        oldest = await dbhelp.find_oldest_obs()
+        # now we have visits get exposures
+
+        helper = await TestConsdb.setup_db()
+        start = 60858.98263978243
+        assert oldest < start
+
+        # skip 2
+        end = 60859.98263978243
+        exposures = await helper.get_exposures_between(start, end)
+        res = await dbhelp.update_entries(exposures)
+        assert res == 0  # no overlap here
+        # lets modify N entrues to get them update
+        N = 4
+        for i in range(1, N):
+            exposures[i].s_ra = obsplan[i].s_ra
+            exposures[i].s_dec = obsplan[i].s_dec
+            exposures[i].obs_start_mjd = obsplan[i].t_planning
+            exposures[i].obs_end_mjd = (
+                obsplan[i].t_planning + obsplan[i].t_exptime
+            )
+
+        res = await dbhelp.update_entries(exposures)
+        assert res == N  # no overlap here

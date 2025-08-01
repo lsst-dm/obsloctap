@@ -19,22 +19,25 @@ import random
 import time
 
 import aiokafka
+import structlog
+from astropy.time import Time
 from lsst.resources import ResourcePath
 
+from obsloctap.config import Configuration
+from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
+from obsloctap.db import DbHelp, DbHelpProvider
 from obsloctap.schedule24h import Schedule24
 
 # Configure logging
-log = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-formatter = logging.Formatter(
-    "%(asctime)s [%(name)-12s] %(levelname)-8s %(message)s"
-)
-handler.setFormatter(formatter)
-log.addHandler(handler)
+log = structlog.getLogger(__name__)
+
+level = logging.DEBUG
 if "LOG_LEVEL" in os.environ:
-    log.setLevel(os.environ["LOG_LEVEL"].upper())
-else:
-    log.setLevel("DEBUG")
+    # Get the log level string from environment
+    log_level_str = os.environ.get("LOG_LEVEL", "DEGUB").upper()
+    # Convert string to logging level (e.g., "DEBUG" -> logging.DEBUG)
+    level = getattr(logging, log_level_str, logging.INFO)
+structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(level))
 # Environment variables from deployment
 
 kafka_cluster = os.environ["KAFKA_CLUSTER"]
@@ -48,6 +51,35 @@ jaas = ("org.apache.kafka.common.security.scram.ScramLoginModule required",)
 # TODO this needs to be LSSTCam but that doe snot exist yet
 topic = "lsst.sal.MTHeaderService.logevent_largeFileObjectAvailable"
 sched24 = Schedule24()
+
+
+async def do_exp_updates(stopafter: int = 0) -> None:
+    """this will get the consdb entries for scheduled observations
+    it never exits .. but sleeps for a fe wmoinutes"""
+    config = Configuration()
+    db: DbHelp = await DbHelpProvider.getHelper()
+    # config hours - sleep is in seconds
+    stime = config.exp_sleeptime * 60
+    # this will be true always unless we pass in a number which is for test
+    log.info("Starting updates")
+    count = 0
+    exec = 0
+    entries = 0
+    while stopafter != count:
+        now = Time.now().to_value("mjd")
+        old = await db.find_oldest_obs()
+        if old > now:  # we may have somethign to do
+            cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
+            exposures = cdb.get_exposures_between(old, now)
+            entries += db.update_entries(exposures)
+        count += 1
+        if count % 100 == 0:
+            log.info(
+                f"Update exposures {count} runs "
+                f"executed {exec} updates."
+                f"Updated {entries} total planning lines"
+            )
+        await asyncio.sleep(stime)
 
 
 def process_resource(resource: ResourcePath) -> None:
@@ -85,6 +117,12 @@ async def consume() -> None:
 
 
 runner = asyncio.Runner()
+print("now exp update")
+try:
+    runner.run(do_exp_updates())
+except Exception as e:
+    log.error(e)
+
 try:
     runner.run(sched24.do24hs())
 except Exception as e:

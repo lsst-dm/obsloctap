@@ -5,7 +5,7 @@ import unittest
 import pytest
 from sqlalchemy import text
 
-from src.obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
+from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
 from tests.DBmock import SqliteDbHelp
 
 
@@ -22,8 +22,11 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     async def setup_db() -> ConsDbHelp:
+        os.environ["consdb_url"] = ":memory:"
+        os.environ["consdb_schema"] = ""
         os.environ["database_url"] = ":memory:"
         os.environ["database_schema"] = ""
+
         lite = SqliteDbHelp()
         dbhelp = await SqliteDbHelp.getConsDbMock()
         await lite.setup_consdb_schema()

@@ -240,6 +240,7 @@ class DbHelp:
         session = AsyncSession(self.engine)
         result = await session.execute(text(statement))
         oldobs: list[Obsplan] = self.process(result.all())
+        session.close()
         todelete = list()
         tomark = list()
         obscount = 0
@@ -291,9 +292,10 @@ class DbHelp:
         """Mark old observations `Not observed`
         if t_planning is in the past and it is still scheduled
         it is not happening.
-        Now if possibly too aggressive but 30 minutes should be ok"""
+        at least if its from yesterday it should go"""
         session = AsyncSession(self.engine)
-        t: Time = Time.now() + TimeDelta(30 * u.min)
+        t: Time = Time.now() + TimeDelta(30 * u.h)
+
         told = t.to_value("mjd")
         nob = "'Not Observed'"
         sched = "'Scheduled'"

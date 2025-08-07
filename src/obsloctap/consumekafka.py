@@ -38,6 +38,7 @@ if "LOG_LEVEL" in os.environ:
     # Convert string to logging level (e.g., "DEBUG" -> logging.DEBUG)
     level = getattr(logging, log_level_str, logging.INFO)
 structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(level))
+print(f"Log level {level}")
 # Environment variables from deployment
 
 kafka_cluster = os.environ["KAFKA_CLUSTER"]
@@ -61,7 +62,7 @@ async def do_exp_updates(stopafter: int = 0) -> None:
     # config hours - sleep is in seconds
     stime = config.exp_sleeptime * 60
     # this will be true always unless we pass in a number which is for test
-    log.info("Starting updates")
+    log.info("Starting updates ")
     count = 0
     exec = 0
     entries = 0
@@ -117,7 +118,7 @@ async def consume() -> None:
 
 
 runner = asyncio.Runner()
-print("now exp update")
+print("exposure update")
 try:
     runner.run(do_exp_updates())
 except Exception as e:

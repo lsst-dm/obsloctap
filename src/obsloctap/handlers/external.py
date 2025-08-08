@@ -13,6 +13,7 @@
 
 import logging
 
+from astropy.time import Time
 from fastapi import APIRouter, Depends
 from fastapi.params import Query
 from safir.dependencies.logger import logger_dependency
@@ -72,10 +73,21 @@ async def get_index(
     summary="Observation Schedule",
 )
 async def get_schedule(
+    start: str = Query(
+        "now",
+        description="time to start from 'now' or ISO 'YYYY-MM-DD HH:MM:SS'",
+    ),
     time: int = Query(24, description="hours[1-48] for schedule lookahead"),
     logger: BoundLogger = Depends(logger_dependency),
 ) -> list[Obsplan]:
-    logger.info(f"Schedule requested for time: {time}")
+    logger.info(f"Schedule requested for time: {time}, start {start}")
     dbhelp = await DbHelpProvider.getHelper()
-    schedule = await dbhelp.get_schedule(time)
+    if start and start.lower() != "now":
+        t = Time(
+            start, format="iso", scale="utc"
+        )  # or scale='tai', etc. as appropriate
+        mjd = t.mjd
+        schedule = await dbhelp.get_schedule(time, start=mjd)
+    else:
+        schedule = await dbhelp.get_schedule(time)
     return schedule

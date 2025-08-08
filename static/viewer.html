@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Rubin Schedule Viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { font-size: 2em; }
+    input, select, button { margin: 5px; padding: 4px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #eaeaea; }
+    #status { color: #1a6b2a; font-weight: bold; margin-left: 15px; }
+  </style>
+</head>
+<body>
+
+  <h1>Rubin Schedule Viewer</h1>
+  <div>
+    <span id="status"></span>
+  </div>
+  <div>
+    <label>Start (MJD): <input type="string" step="any" id="startInput" value="now">now</label>
+    <label>Time (Hours): <input type="number" step="any" id="timeInput" value="48">48</label>
+    <button onclick="fetchData()">Fetch</button>
+    <button onclick="resetJson()">Reset JSON</button>
+  </div>
+  <div>
+    <label>Filter by execution_status:
+      <select id="statusFilter" onchange="renderTable()">
+        <option value="">All</option>
+      </select>
+    </label>
+    <label>Filter by target_name:
+      <select id="targetFilter" onchange="renderTable()">
+        <option value="">All</option>
+      </select>
+    </label>
+  </div>
+  <table id="jsonTable"></table>
+
+<script>
+let originalData = [];
+let data = [];
+let mjdFields = ["t_planning"];
+
+async function fetchData() {
+  document.getElementById('status').textContent = "Loading…";
+  try {
+    // Get start and time values from input fields
+    const start = encodeURIComponent(document.getElementById('startInput').value);
+    const time = encodeURIComponent(document.getElementById('timeInput').value);
+
+    const url = `/schedule?start=${start}&time=${time}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
+    data = await resp.json();
+    if (!Array.isArray(data)) data = [data];
+    originalData = JSON.parse(JSON.stringify(data));
+    document.getElementById('status').textContent = `Loaded ${data.length} rows.`;
+    populateFilters();
+    renderTable();
+  } catch (e) {
+    document.getElementById('status').textContent = "Error: " + e.message;
+    document.getElementById('jsonTable').innerHTML = "";
+  }
+}
+
+function resetJson() {
+  data = JSON.parse(JSON.stringify(originalData));
+  renderTable();
+}
+
+function mjdToUTC(mjd) {
+  if (typeof mjd !== "number") return "";
+  const JD = mjd + 2400000.5;
+  const unixMillis = (JD - 2440587.5) * 86400000;
+  const d = new Date(unixMillis);
+  if (isNaN(d.getTime())) return "";
+  const pad = n => n.toString().padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+function shiftTimes() {
+  const start = parseFloat(document.getElementById('startInput').value);
+  const time = parseFloat(document.getElementById('timeInput').value);
+  if (isNaN(start) || isNaN(time)) return alert("Invalid input values.");
+  data.forEach(obj => {
+    mjdFields.forEach(field => {
+      if (typeof obj[field] === "number") {
+        obj[field] = start + (obj[field] - start) + time/86400;
+      }
+    });
+  });
+  renderTable();
+}
+
+function populateFilters() {
+  const statusSet = new Set(data.map(row => row.execution_status));
+  const targetSet = new Set(data.map(row => row.target_name));
+  const statusFilter = document.getElementById('statusFilter');
+  const targetFilter = document.getElementById('targetFilter');
+  statusFilter.innerHTML = `<option value="">All</option>` +
+    [...statusSet].map(v => `<option value="${v}">${v}</option>`).join('');
+  targetFilter.innerHTML = `<option value="">All</option>` +
+    [...targetSet].map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+function renderTable() {
+  const table = document.getElementById('jsonTable');
+  if (!data.length) {
+    table.innerHTML = "<tr><td>No data loaded</td></tr>";
+    return;
+  }
+  // Filtering
+  const statusFilter = document.getElementById('statusFilter').value;
+  const targetFilter = document.getElementById('targetFilter').value;
+  let filtered = data.filter(obj =>
+    (!statusFilter || obj.execution_status === statusFilter) &&
+    (!targetFilter || obj.target_name === targetFilter)
+  );
+  const keys = Object.keys(filtered[0]);
+  table.innerHTML =
+    `<tr>` +
+    keys.map(k => `<th>${k}</th>`).join('') +
+    mjdFields.map(f => `<th>${f}_UTC</th>`).join('') +
+    `</tr>`;
+  filtered.forEach(obj => {
+    table.innerHTML += `<tr>` +
+      keys.map(k => `<td>${obj[k]}</td>`).join('') +
+      mjdFields.map(f =>
+        `<td>${typeof obj[f] === "number" ? mjdToUTC(obj[f]) : ""}</td>`
+      ).join('') +
+      `</tr>`;
+  });
+}
+
+// Auto-fetch data on page load
+fetchData();
+
+</script>
+</body>
+</html>

@@ -22,6 +22,7 @@ import logging
 from importlib.metadata import metadata, version
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from safir.dependencies.http_client import http_client_dependency
 from safir.logging import configure_logging, configure_uvicorn_logging
 from safir.middleware.x_forwarded import XForwardedMiddleware
@@ -49,6 +50,11 @@ app = FastAPI(
     openapi_url=f"/{config.path_prefix}/openapi.json",
     docs_url=f"/{config.path_prefix}/docs",
     redoc_url=f"/{config.path_prefix}/redoc",
+)
+app.mount(
+    f"{config.path_prefix}/static",
+    StaticFiles(directory="static"),
+    name="static",
 )
 """The main FastAPI application for obsloctap."""
 

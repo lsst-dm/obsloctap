@@ -103,7 +103,7 @@ class Configuration(BaseSettings):
 
     consdb_database: str = Field(
         "consdb",
-        title="COnsdb postgres database name",
+        title="Consdb postgres database name",
         env="consdb_database",
     )
 

@@ -28,3 +28,6 @@ run:
 
 consume:
 	docker  build  . -f Dockerfile.consumekafka -t consumekafka
+
+obsloctap:
+	docker  build  . -f Dockerfile.obsloctap -t obsloctap

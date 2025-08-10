@@ -44,6 +44,8 @@ FROM dependencies-image as install-image
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY . /workdir
+COPY static /workdir/static
+
 WORKDIR /workdir
 RUN pip install --no-cache-dir .
 
@@ -55,6 +57,13 @@ RUN useradd --create-home appuser
 # Copy the virtualenv
 COPY --from=install-image /opt/venv /opt/venv
 
+WORKDIR /app
+
+# bring the built static assets into the runtime image
+COPY --from=install-image /workdir/static /app/static
+
+# make sure the non-root user can read the files
+RUN chown -R appuser:appuser /app
 # Make sure we use the virtualenv
 ENV PATH="/opt/venv/bin:$PATH"
 

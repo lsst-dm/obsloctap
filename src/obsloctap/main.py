@@ -52,7 +52,7 @@ app = FastAPI(
     redoc_url=f"/{config.path_prefix}/redoc",
 )
 app.mount(
-    "/static",
+    f"/{config.path_prefix}/static",
     StaticFiles(directory="static"),
     name="static",
 )

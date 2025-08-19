@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+
   <title>Rubin Schedule Viewer</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
@@ -12,16 +13,20 @@
     th { background: #eaeaea; }
     #status { color: #1a6b2a; font-weight: bold; margin-left: 15px; }
   </style>
+  <link rel="icon" href="/obsloctap/favicon.ico" type="image/x-icon">
 </head>
 <body>
 
-  <h1>Rubin Schedule Viewer</h1>
+   <header style="display: flex; align-items: center; margin-bottom: 20px;">
+    <img src="logo.svg" alt="Logo" style="height: 50px; margin-right: 10px;">
+     <h1>Rubin Schedule Viewer</h1>
+  </header>
   <div>
     <span id="status"></span>
   </div>
   <div>
-    <label>Start (MJD): <input type="string" step="any" id="startInput" value="now">now</label>
-    <label>Time (Hours): <input type="number" step="any" id="timeInput" value="48">48</label>
+    <label>Start (MJD): <input type="string" step="any" id="startInput" value="now"></label>
+    <label>Time (Hours): <input type="number" step="any" id="timeInput" value="24"></label>
     <button onclick="fetchData()">Fetch</button>
     <button onclick="resetJson()">Reset JSON</button>
   </div>
@@ -51,7 +56,7 @@ async function fetchData() {
     const start = encodeURIComponent(document.getElementById('startInput').value);
     const time = encodeURIComponent(document.getElementById('timeInput').value);
 
-    const url = `/schedule?start=${start}&time=${time}`;
+    const url = `/obsloctap/schedule?start=${start}&time=${time}`;
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
     data = await resp.json();
@@ -81,20 +86,6 @@ function mjdToUTC(mjd) {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
-function shiftTimes() {
-  const start = parseFloat(document.getElementById('startInput').value);
-  const time = parseFloat(document.getElementById('timeInput').value);
-  if (isNaN(start) || isNaN(time)) return alert("Invalid input values.");
-  data.forEach(obj => {
-    mjdFields.forEach(field => {
-      if (typeof obj[field] === "number") {
-        obj[field] = start + (obj[field] - start) + time/86400;
-      }
-    });
-  });
-  renderTable();
-}
-
 function populateFilters() {
   const statusSet = new Set(data.map(row => row.execution_status));
   const targetSet = new Set(data.map(row => row.target_name));
@@ -121,16 +112,17 @@ function renderTable() {
   );
   const keys = Object.keys(filtered[0]);
   table.innerHTML =
-    `<tr>` +
-    keys.map(k => `<th>${k}</th>`).join('') +
-    mjdFields.map(f => `<th>${f}_UTC</th>`).join('') +
-    `</tr>`;
+  `<tr>` +
+  mjdFields.map(f => `<th>${f}_UTC</th>`).join('') +
+  keys.map(k => `<th>${k}</th>`).join('') +
+  `</tr>`;
+
   filtered.forEach(obj => {
     table.innerHTML += `<tr>` +
-      keys.map(k => `<td>${obj[k]}</td>`).join('') +
       mjdFields.map(f =>
         `<td>${typeof obj[f] === "number" ? mjdToUTC(obj[f]) : ""}</td>`
       ).join('') +
+      keys.map(k => `<td>${obj[k]}</td>`).join('') +
       `</tr>`;
   });
 }
@@ -141,3 +133,4 @@ fetchData();
 </script>
 </body>
 </html>
+

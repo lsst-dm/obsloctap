@@ -19,6 +19,7 @@ called.
 """
 
 import logging
+import os
 from importlib.metadata import metadata, version
 
 from fastapi import FastAPI
@@ -26,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from safir.dependencies.http_client import http_client_dependency
 from safir.logging import configure_logging, configure_uvicorn_logging
 from safir.middleware.x_forwarded import XForwardedMiddleware
+from starlette.responses import FileResponse
 
 from .config import config
 from .handlers.external import external_router
@@ -52,12 +54,18 @@ app = FastAPI(
     redoc_url=f"/{config.path_prefix}/redoc",
 )
 app.mount(
-    f"/{config.path_prefix}/static",
+    f"{config.path_prefix}/static",
     StaticFiles(directory="static"),
     name="static",
 )
-"""The main FastAPI application for obsloctap."""
 
+
+@app.get(f"{config.path_prefix}/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    return FileResponse(os.path.join("static", "favicon.ico"))
+
+
+"""The main FastAPI application for obsloctap."""
 # Attach the routers.
 app.include_router(internal_router)
 app.include_router(external_router, prefix=config.path_prefix)

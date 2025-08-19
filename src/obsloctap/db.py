@@ -114,6 +114,7 @@ class DbHelp:
         config = Configuration()
 
         whereclause = ""
+        limitclause = ""
 
         if time != 0:
             now = start if start else Time.now()
@@ -125,12 +126,14 @@ class DbHelp:
             whereclause = (
                 f" where t_planning between  " f"{startmjd} AND {window}"
             )
+            limitclause = f" limit  {config.obsplanLimit}"
 
         statement = (
             f"select {self.insert_fields} from "
             f'{self.schema}"{Obsplan.__tablename__}"'
-            f" {whereclause}"
-            f" order by t_planning DESC limit  {config.obsplanLimit}"
+            f"{whereclause}"
+            f" order by t_planning DESC "
+            f"{limitclause}"
         )
         log.debug(f"get_schedule: {statement}")
         session = AsyncSession(self.engine)
@@ -355,7 +358,7 @@ class MockDbHelp(DbHelp):
     async def get_schedule(
         self, time: float = 0, start: Time | None = None
     ) -> list[Obsplan]:
-        log.warning("Using MOCKDBHelp")
+        log.warning(f"Using MOCKDBHelp start {start}, time {time} ignored")
         observations = []
         obs = Obsplan()
         obs.t_planning = 60032.194918981484

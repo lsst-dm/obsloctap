@@ -86,8 +86,7 @@ async def get_schedule(
         t = Time(
             start, format="iso", scale="utc"
         )  # or scale='tai', etc. as appropriate
-        mjd = t.mjd
-        schedule = await dbhelp.get_schedule(time, start=mjd)
+        schedule = await dbhelp.get_schedule(time, start=t)
     else:
         schedule = await dbhelp.get_schedule(time)
     return schedule

@@ -114,7 +114,7 @@ class DbHelp:
         config = Configuration()
 
         whereclause = ""
-        limitclause = ""
+        limitclause = f" limit  {config.obsplanLimit}"
 
         if time != 0:
             now = start if start else Time.now()
@@ -126,7 +126,7 @@ class DbHelp:
             whereclause = (
                 f" where t_planning between  " f"{startmjd} AND {window}"
             )
-            limitclause = f" limit  {config.obsplanLimit}"
+            limitclause = ""
 
         statement = (
             f"select {self.insert_fields} from "

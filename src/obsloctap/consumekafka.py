@@ -130,5 +130,9 @@ except Exception as e:
     log.error(e)
 
 print("now kafka")
-runner.run(consume())
+try:
+    runner.run(consume())
+except Exception as e:
+    log.error(e)
+
 runner.close()

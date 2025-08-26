@@ -13,7 +13,7 @@
 
 import logging
 
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 from fastapi import APIRouter, Depends
 from fastapi.params import Query
 from safir.dependencies.logger import logger_dependency
@@ -83,9 +83,20 @@ async def get_schedule(
     logger.info(f"Schedule requested for time: {time}, start {start}")
     dbhelp = await DbHelpProvider.getHelper()
     if start and start.lower() != "now":
-        t = Time(
-            start, format="iso", scale="utc"
-        )  # or scale='tai', etc. as appropriate
+        t = Time.now() - TimeDelta("1440min")
+        success = False
+        try:
+            t = Time(start, format="iso", scale="utc")
+            success = True
+        except Exception:
+            pass
+        try:
+            t = Time(float(start), format="mjd")
+            success = True
+        except Exception:
+            pass
+
+        logger.info(f"Converted time: {success} - Using start time: {t}")
         schedule = await dbhelp.get_schedule(time, start=t)
     else:
         schedule = await dbhelp.get_schedule(time)

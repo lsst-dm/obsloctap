@@ -31,3 +31,6 @@ consume:
 
 obsloctap:
 	docker  build  . -f Dockerfile.obsloctap -t obsloctap
+
+runlocal:
+	uvicorn obsloctap.main:app

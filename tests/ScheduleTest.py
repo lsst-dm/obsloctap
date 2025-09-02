@@ -15,6 +15,14 @@ from tests.DBmock import SqliteDbHelp
 class MockSchedule(Schedule24):
     def get_schedule24(self) -> DataFrame:
         visits = pd.read_pickle("tests/schedule24-2506.pkl")
+        if type(visits) is not DataFrame:
+            visits = DataFrame(visits)
+        return visits
+
+
+class MockScheduleEmpty(Schedule24):
+    def get_schedule24(self) -> DataFrame:
+        visits: DataFrame = pd.DataFrame
         return visits
 
 
@@ -30,6 +38,8 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
     def test_schedule_format(self) -> None:
         # schedule24rs.pkl is from the api call (see testutils)
         visits = pd.read_pickle("tests/schedule24rs.pkl")
+        if type(visits) is not DataFrame:
+            visits = DataFrame(visits)
         obs = Schedule24().format_schedule(visits)
         self.assertEqual(len(obs), len(visits), "Not all entries")
         self.assertGreaterEqual(len(obs), 10, "Not enough entries")
@@ -37,6 +47,8 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(
             obs[0].t_planning, obs[0].t_min, "t_planning should be >t_min"
         )
+        # test null
+        obs = Schedule24().format_schedule(pd.DataFrame)
 
     @pytest.mark.asyncio
     async def test_schedule24(self) -> None:
@@ -56,6 +68,25 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ms.count, reps, f"Should run {reps} times ")
         obs = await dbhelp.get_schedule(0)
         self.assertGreater(len(obs), 0, " DB should have entries at end")
+
+    @pytest.mark.asyncio
+    async def test_schedule24empty(self) -> None:
+        lite = SqliteDbHelp()
+        dbhelp = await SqliteDbHelp.getSqlLite()
+        await lite.setup_schema()
+
+        obs = await dbhelp.get_schedule(0)
+        self.assertEqual(len(obs), 0, " DB should be empty to start with ")
+
+        config = Configuration()
+        print(f"Sleeptime is {config.sleeptime}")
+        ms = MockScheduleEmpty()
+        reps = 2
+        await ms.do24hs(reps)
+        print(f"Executed loop {ms.count} times")
+        self.assertEqual(ms.count, reps, f"Should run {reps} times ")
+        obs = await dbhelp.get_schedule(0)
+        self.assertEqual(len(obs), 0, " DB should have no entries at end")
 
 
 python_classes = "TestCase"

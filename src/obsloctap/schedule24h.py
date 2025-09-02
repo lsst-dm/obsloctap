@@ -17,7 +17,6 @@ then foirmat to obsplan and store in DB.
 __all__ = ["Schedule24"]
 
 import asyncio
-import logging
 from operator import attrgetter
 
 import structlog
@@ -56,16 +55,16 @@ class Schedule24:
         Returns   DataFrame of schedule entries
         -------
         """
-        logging.info(f"Using rubin_sim {rubin_sim_version}")
+        log.info(f"Using rubin_sim {rubin_sim_version}")
 
         try:
             visits = sim_archive.fetch_obsloctap_visits(nights=2)
         except TypeError:
-            logging.info("Dropping to 1 night")
+            log.info("Dropping to 1 night")
             visits = sim_archive.fetch_obsloctap_visits(nights=1)
-        logging.info(f"Got {len(visits)} for 24 hour schedule")
         if type(visits) is not DataFrame:
             visits = DataFrame(visits)
+            log.info(f"Got {visits.size} for 24 hour schedule")
         return visits
 
     # see DMTN-263
@@ -74,6 +73,8 @@ class Schedule24:
         a sorted list of Obsplan objects
         see also rtn-096"""
         obslist: list[Obsplan] = []
+        if visits.empty:
+            return obslist
         for ind, v in visits.iterrows():
             obs = Obsplan()
             obs.target_name = v["target_name"]  # shoudl be scheduler_note
@@ -90,11 +91,12 @@ class Schedule24:
             obs.em_min = spectral_range[0]
             obs.em_max = spectral_range[1]
             obslist.append(obs)
-        obslist.sort(key=attrgetter("t_planning"), reverse=True)
-        log.info(
-            f"Obsplan schedule from {obslist[0].t_planning} to "
-            f"{obslist[-1].t_planning} - with {len(obslist)} entries."
-        )
+        if obslist and len(obslist) > 0:
+            obslist.sort(key=attrgetter("t_planning"), reverse=True)
+            log.info(
+                f"Obsplan schedule from {obslist[0].t_planning} to "
+                f"{obslist[-1].t_planning} - with {len(obslist)} entries."
+            )
         return obslist
 
     async def get_update_schedule24(self) -> int:
@@ -102,8 +104,8 @@ class Schedule24:
         manage updates to come
 
         Returns number of rows inserted"""
-        logging.info("Getting 24hr schedule")
         visits = self.get_schedule24()
+        log.debug(f"Got {visits.size} visits")
         obsplan = self.format_schedule(visits)
         dbhelp = await DbHelpProvider.getHelper()
         await dbhelp.remove_flag(obsplan)
@@ -117,6 +119,7 @@ class Schedule24:
         # config hours - sleep is in seconds
         stime = config.sleeptime * 60 * 60
         # this will be tru always unless we pass in a number which is for test
+        log.info("Starting 24hr schedule updates ")
         while stopafter != self.count:
             await self.get_update_schedule24()
             self.count = self.count + 1

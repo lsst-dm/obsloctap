@@ -29,7 +29,6 @@ from obsloctap.db import DbHelp, DbHelpProvider
 from obsloctap.schedule24h import Schedule24
 
 # Configure logging
-log = structlog.getLogger(__name__)
 
 level = logging.DEBUG
 if "LOG_LEVEL" in os.environ:
@@ -39,6 +38,8 @@ if "LOG_LEVEL" in os.environ:
     level = getattr(logging, log_level_str, logging.INFO)
 structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(level))
 print(f"Log level {level}")
+log = structlog.getLogger(__name__)
+log.info(f" sent to INFO - Log level {level}")
 # Environment variables from deployment
 
 kafka_cluster = os.environ["KAFKA_CLUSTER"]
@@ -62,7 +63,7 @@ async def do_exp_updates(stopafter: int = 0) -> None:
     # config hours - sleep is in seconds
     stime = config.exp_sleeptime * 60
     # this will be true always unless we pass in a number which is for test
-    log.info("Starting updates ")
+    log.info("Starting updates from consdb ")
     count = 0
     exec = 0
     entries = 0
@@ -73,13 +74,13 @@ async def do_exp_updates(stopafter: int = 0) -> None:
             cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
             exposures = cdb.get_exposures_between(old, now)
             entries += db.update_entries(exposures)
-        count += 1
         if count % 100 == 0:
             log.info(
                 f"Update exposures {count} runs "
                 f"executed {exec} updates."
                 f"Updated {entries} total planning lines"
             )
+        count += 1
         await asyncio.sleep(stime)
 
 
@@ -118,20 +119,21 @@ async def consume() -> None:
 
 
 runner = asyncio.Runner()
-print("exposure update")
+log.info("exposure update")
 try:
     runner.run(do_exp_updates())
-except Exception as e:
-    log.error(e)
+except Exception:
+    log.exception("exposure update error")
 
+log.info("24h schedule")
 try:
     runner.run(sched24.do24hs())
-except Exception as e:
-    log.error(e)
+except Exception:
+    log.exception("24h schedule error")
 
-print("now kafka")
 try:
-    runner.run(consume())
+    log.info("Not running kafka")
+    # runner.run(consume())
 except Exception as e:
     log.error(e)
 

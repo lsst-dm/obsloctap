@@ -1,4 +1,4 @@
-FROM python:3.13.1-slim-bullseye as base-image
+FROM python:3.13.6-slim-bullseye as base-image
 
 # Update system packages
 COPY scripts/install-base-packages.sh .
@@ -39,4 +39,4 @@ ENV PATH="/opt/venv/bin:$PATH"
 USER appuser
 
 # Run the application.
-ENTRYPOINT [ "python", "-m", "obsloctap.consumekafka.py" ]
+ENTRYPOINT [ "python", "-m", "obsloctap.consumekafka" ]

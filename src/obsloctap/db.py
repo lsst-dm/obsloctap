@@ -139,7 +139,7 @@ class DbHelp:
         session = AsyncSession(self.engine)
         result = await session.execute(text(statement))
         obs = result.all()
-        log.debug(f"Got scedule with {len(obs)} elements")
+        log.debug(f"Got scedule with {len(obs or [])} elements")
         if len(obs) == 0 and time != 0:
             log.info(f"No observations between {startmjd}" f"and {window}")
         await session.close()
@@ -174,8 +174,10 @@ class DbHelp:
             await self.insert_obs(session, observation)
         await session.commit()
         await session.close()
-        log.info(f"Inserted and commited {len(observations)} Observations.")
-        return len(observations)
+        log.info(
+            f"Inserted and commited {len(observations or [])} Observations."
+        )
+        return len(observations or [])
 
     async def update_entries(
         self, exposures: list[Exposure], tol: float = 1
@@ -229,6 +231,8 @@ class DbHelp:
 
         Returns number of entries marked not executed"""
 
+        if len(observations) == 0:
+            return 0
         # oservations are sorted
         maxt = observations[-1].t_planning
         mint = observations[0].t_planning
@@ -243,9 +247,9 @@ class DbHelp:
         session = AsyncSession(self.engine)
         result = await session.execute(text(statement))
         oldobs: list[Obsplan] = self.process(result.all())
-        session.close()
-        todelete = list()
-        tomark = list()
+        await session.close()
+        todelete: list = []
+        tomark: list = []
         obscount = 0
         # loop over the old observations and match to new ones
         # both lists in descending order
@@ -273,7 +277,7 @@ class DbHelp:
         log.info(f"delete {todelete} \n Mark {tomark}")
         await self.delete_obs(todelete)
         await self.mark_obs(tomark)
-        return len(tomark)
+        return len(tomark or [])
 
     async def find_oldest_obs(self) -> float:
         """Look for entries with t_planning  in the past and it is still
@@ -371,7 +375,7 @@ class MockDbHelp(DbHelp):
 
     async def insert_obsplan(self, observations: list[Obsplan]) -> int:
         MockDbHelp.obslist.extend(observations)
-        return len(observations)
+        return len(observations or [])
 
 
 # sort of singleton

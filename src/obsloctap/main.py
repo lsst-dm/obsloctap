@@ -20,7 +20,9 @@ called.
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from importlib.metadata import metadata, version
+from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -45,6 +47,16 @@ configure_uvicorn_logging(config.log_level)
 
 log = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Startup code
+    logging.info("Starting up")
+    yield
+    logging.info("Shutting down")
+    await http_client_dependency.aclose()
+
+
 app = FastAPI(
     title="obsloctap",
     description=metadata("obsloctap")["Summary"],
@@ -52,6 +64,7 @@ app = FastAPI(
     openapi_url=f"/{config.path_prefix}/openapi.json",
     docs_url=f"/{config.path_prefix}/docs",
     redoc_url=f"/{config.path_prefix}/redoc",
+    lifespan=lifespan,
 )
 app.mount(
     f"{config.path_prefix}/static",
@@ -71,14 +84,3 @@ app.include_router(internal_router)
 app.include_router(external_router, prefix=config.path_prefix)
 
 app.add_middleware(XForwardedMiddleware)
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    logging.info("Starting up")
-    pass
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    await http_client_dependency.aclose()

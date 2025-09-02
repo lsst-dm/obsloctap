@@ -125,11 +125,18 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         start = 60858.98263978243
         assert oldest < start
 
+        plans = len(await dbhelp.get_schedule(time=0))
+        # this should get all ..
+        # having some duplicates so need to make sure
+        # Updates are only updating
+
         # skip 2
         end = 60859.98263978243
         exposures = await helper.get_exposures_between(start, end)
         res = await dbhelp.update_entries(exposures)
         assert res == 0  # no overlap here
+        plans2 = len(await dbhelp.get_schedule(time=0))
+        assert plans2 == plans
         # lets modify N entrues to get them update
         N = 4
         for i in range(1, N):
@@ -142,3 +149,5 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
 
         res = await dbhelp.update_entries(exposures)
         assert res == N  # no overlap here
+        plans2 = len(await dbhelp.get_schedule(time=0))
+        assert plans2 == plans

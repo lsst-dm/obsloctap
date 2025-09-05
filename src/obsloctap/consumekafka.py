@@ -67,11 +67,19 @@ async def do_exp_updates(stopafter: int = 0) -> None:
     count = 0
     exec = 0
     entries = 0
+
+    now = Time.now().to_value("mjd")
+    fillin = db.find_last()
+    cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
+    exposures = cdb.get_exposures_between(fillin, now)
+    for exp in exposures:
+        db.insert_exposure(exp)
+
     while stopafter != count:
-        now = Time.now().to_value("mjd")
         old = await db.find_oldest_obs()
-        if old > now:  # we may have somethign to do
-            cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
+        log.info(f"Oldest obs MJD is {old} - now {now}")
+        if old > now:  # we may have something to do
+            cdb = await ConsDbHelpProvider.getHelper()
             exposures = cdb.get_exposures_between(old, now)
             entries += db.update_entries(exposures)
         if count % 100 == 0:

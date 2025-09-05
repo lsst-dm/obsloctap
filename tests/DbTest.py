@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import os
+import pickle
 import unittest
 
 import pandas as pd
 import pytest
 from astropy.time import Time
 
+from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
 from obsloctap.db import OBSPLAN_FIELDS, DbHelp
 from obsloctap.models import Obsplan
 from obsloctap.schedule24h import Schedule24
@@ -22,9 +24,12 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         os.environ["database_url"] = ":memory:"
         os.environ["database_schema"] = ""
+        os.environ["consdb_url"] = ":memory:"
+        os.environ["consdb_schema"] = ""
 
     async def asyncTearDown(self) -> None:
         os.environ["database_url"] = ""
+        os.environ["consdb_url"] = ""
 
     @staticmethod
     async def setup_db() -> DbHelp:
@@ -133,11 +138,13 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         # skip 2
         end = 60859.98263978243
         exposures = await helper.get_exposures_between(start, end)
+        noexps = len(exposures)
         res = await dbhelp.update_entries(exposures)
-        assert res == 0  # no overlap here
+        assert res == 0  # no overlap here - no updates
+        # but all exposures are added
         plans2 = len(await dbhelp.get_schedule(time=0))
-        assert plans2 == plans
-        # lets modify N entrues to get them update
+        assert plans2 == plans + noexps
+        # lets modify N entries to get them updated
         N = 4
         for i in range(1, N):
             exposures[i].s_ra = obsplan[i].s_ra
@@ -148,6 +155,26 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
             )
 
         res = await dbhelp.update_entries(exposures)
-        assert res == N  # no overlap here
+        # now exposures not matching are added as observations
+        # that happened above and they will be updated this time
+        self.assertEqual(res, noexps - 1)  # should have updated the exposures
+        # 1 does not match
         plans2 = len(await dbhelp.get_schedule(time=0))
-        assert plans2 == plans
+        self.assertEqual(plans2, plans + noexps + 1)  # the one not matched
+
+    @pytest.mark.asyncio
+    async def test_insert_exposure(self) -> None:
+        dbhelp = await TestDB.setup_db()
+        # Load exposure from pickle file for testing
+        plans = len(await dbhelp.get_schedule(time=0))
+        assert plans == 0  # should be empty
+        with open("tests/consdb.pkl", "rb") as f:
+            exposures = pickle.load(f)
+        cdbh: ConsDbHelp = await ConsDbHelpProvider.getHelper()
+        exps = cdbh.process(exposures)
+
+        exp = exps[0]
+        await dbhelp.insert_exposure(exp, dbhelp.get_session())
+
+        plans2 = len(await dbhelp.get_schedule(time=0))
+        assert plans2 == plans + 1

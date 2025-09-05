@@ -60,7 +60,7 @@ class Schedule24:
         try:
             visits = sim_archive.fetch_obsloctap_visits(nights=2)
         except TypeError:
-            log.info("Dropping to 1 night")
+            log.info("Dropping to 1 night for sim")
             visits = sim_archive.fetch_obsloctap_visits(nights=1)
         if type(visits) is not DataFrame:
             visits = DataFrame(visits)

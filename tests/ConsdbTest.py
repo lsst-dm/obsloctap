@@ -38,8 +38,10 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
             exposures = pickle.load(f)
         cdbh: ConsDbHelp = await ConsDbHelpProvider.getHelper()
         exps = cdbh.process(exposures)
-        # there are some pinholes whihc were marked on sky with no RA DEC
-        self.assertEqual(536, len(exps))
+        count = len(exps)
+        print(f"Loaded {count} exps from pickle of {len(exposures)}")
+        # there are some pinholes which were marked on sky with no RA DEC
+        self.assertEqual(967, len(exps))
 
     async def test_get_exposures_between(self) -> None:
         # Example test: should return data loaded from consdb.pkl
@@ -55,4 +57,4 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
         exposures = await helper.get_exposures_between(start, end)
         assert isinstance(exposures, list)
         # two less than we loaded
-        assert 534 == len(exposures)
+        self.assertEqual(534, len(exposures))

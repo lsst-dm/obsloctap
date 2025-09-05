@@ -186,10 +186,12 @@ class DbHelp:
         Update obsplan entries that match exposures by s_ra, s_dec,
         and obs_start_mjd in [t_min, t_max].
         tol: tolerances for matching s_ra and s_dec.
+        Check it is not 'performed' if it is onlyupdate if same id.
         Returns the number of updated entries.
         """
         session = AsyncSession(self.engine)
         updated = 0
+        unmatched = 0
         for exp in exposures:
             # Find matching obsplan entries
             stmt = (
@@ -201,24 +203,92 @@ class DbHelp:
             )
             result = await session.execute(text(stmt))
             matches = result.fetchall()
-            for match in matches:
-                # Example: update execution_status to 'Updated'
-                update_stmt = (
-                    f'UPDATE {self.schema}"{Obsplan.__tablename__}" '
-                    f"SET execution_status = 'Performed', "
-                    f"target_name = '{exp.target_name}', "
-                    f"obs_collection = '{exp.exposure_id}| "
-                    f"{exp.science_program}| {exp.scheduler_note}', "
-                    f"em_min = '{spectral_ranges[exp.band][0]}', "
-                    f"em_max = '{spectral_ranges[exp.band][1]}', "
-                    f"t_min = {exp.obs_start_mjd}, "
-                    f"t_max = {exp.obs_end_mjd} "
-                    f"WHERE obs_id = '{match.obs_id}'"
-                )
-                await session.execute(text(update_stmt))
-                updated += 1
+            done = False
+            if len(matches) > 0:
+                match = matches[0]
+                # update execution_status to 'Performed'
+                # unless it is Performed .. then we better chekc id
+                # this will mean we can update to get new info from consdb
+                # but not clobber it if the id is different.
+                if match.execution_status != "Performed" or (
+                    match.execution_status == "Performed"
+                    and match.obs_id == str(exp.exposure_id)
+                ):
+                    await self.update_one(exp, match, session)
+                    updated += 1
+                    done = True
+
+            if not done:
+                unmatched += 1
+                await self.insert_exposure(exp, session)
+
         await session.commit()
+        log.info(
+            f"Updated {updated}, unmatched {unmatched} of {len(exposures)}"
+        )
         return updated
+
+    async def insert_exposure(
+        self, exp: Exposure, session: AsyncSession
+    ) -> None:
+        """put in  an obsplan line based on an exposure
+        this is when consdb has an observation but it does not match
+        any planned item"""
+        value_str = (
+            f"0, "  # t_planning
+            f"'{exp.target_name}', "  # target_name
+            f"'{str(exp.exposure_id)}', "  # obs_id
+            f"'{exp.scheduler_note}', "  # obs_collection
+            f"{exp.s_ra}, "  # s_ra
+            f"{exp.s_dec}, "  # s_dec
+            f"3, "  # s_fov
+            f"'', "  # s_region
+            f"0.2, "  # s_resolution
+            f"{exp.obs_start_mjd}, "  # t_min
+            f"{exp.obs_end_mjd}, "  # t_max
+            f"{exp.obs_end_mjd - exp.obs_start_mjd}, "  # t_exptime
+            f"15, "  # t_resolution
+            f"'{spectral_ranges[exp.band][0]}', "  # em_min
+            f"'{spectral_ranges[exp.band][1]}', "  # em_max
+            f"0, "  # em_res_power
+            f"'phot.flux.density', "  # o_ucd
+            f"'', "  # pol_states
+            f"0, "  # pol_xel
+            f"'Vera C. Rubin Observatory', "  # facility_name
+            f"'LSSTCam', "  # instrument_name
+            f"0, "  # t_plan_exptime
+            f"'{exp.science_program}', "  # category
+            f"{1}, "  # priority
+            f"'Performed', "  # execution_status
+            f"'sidereal', "  # tracking_type
+            f"{exp.sky_rotation}, "  # rubin_rot_sky_pos
+            f"{1}"  # rubin_nexp
+        )
+
+        insert_stmt = (
+            f'insert into {self.schema}"{Obsplan.__tablename__}" '
+            f"values ({value_str}) "
+        )
+        await session.execute(text(insert_stmt))
+
+    async def update_one(
+        self, exp: Exposure, match: Row, session: AsyncSession
+    ) -> None:
+        """update an obsplan line based on an exposure"""
+        update_stmt = (
+            f'UPDATE {self.schema}"{Obsplan.__tablename__}" '
+            f"SET execution_status = 'Performed', "
+            f"obs_id = '{exp.exposure_id}', "
+            f"target_name = '{exp.target_name}', "
+            f"obs_collection = '{exp.science_program}| {exp.scheduler_note}', "
+            f"em_min = '{spectral_ranges[exp.band][0]}', "
+            f"em_max = '{spectral_ranges[exp.band][1]}', "
+            f"t_min = {exp.obs_start_mjd}, "
+            f"t_max = {exp.obs_end_mjd}, "
+            f"rubin_rot_sky_pos = {exp.sky_rotation} "
+            f"WHERE obs_id = '{match.obs_id}'"
+        )
+        await session.execute(text(update_stmt))
 
     async def remove_flag(
         self, observations: list[Obsplan], priority: int = 2
@@ -279,21 +349,43 @@ class DbHelp:
         await self.mark_obs(tomark)
         return len(tomark or [])
 
-    async def find_oldest_obs(self) -> float:
+    async def find_last(self) -> float:
         """Look for entries with t_planning  in the past and it is still
-        scheduled, the oldes one will give the start time to seach for
+        scheduled(status), the oldes one will give the start time to seach for
+        expoosures end time can be now
+        """
+        session = AsyncSession(self.engine)
+        statement = (
+            f"select t_planning as t from "
+            f'{self.schema}"{Obsplan.__tablename__}"'
+            f" order by t_planning DESC limit 1 "
+        )
+        res = await session.execute(text(statement))
+        val = res.fetchone()
+        await session.close()
+        if val:
+            return val[0]
+        else:
+            return 0
+
+    async def find_oldest_obs(self, status: str = "Scheduled") -> float:
+        """Look for entries with t_planning  in the past and it is still
+        scheduled(status), the oldes one will give the start time to seach for
         expoosures end time can be now
         """
         session = AsyncSession(self.engine)
         statement = (
             f"select min(t_planning) as t from "
             f'{self.schema}"{Obsplan.__tablename__}"'
-            f" where execution_status = 'Scheduled' "
+            f" where execution_status = '{status}' "
         )
         res = await session.execute(text(statement))
-        val = res.fetchone()[0]
+        val = res.fetchone()
         await session.close()
-        return val
+        if val:
+            return val[0]
+        else:
+            return 0
 
     async def mark_old_obs(self) -> None:
         """Mark old observations `Not observed`

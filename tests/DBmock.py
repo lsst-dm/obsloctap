@@ -22,7 +22,8 @@ CREATE TABLE exposure (
     target_name TEXT,
     science_program TEXT,
     scheduler_note TEXT,
-    can_see_sky INTEGER DEFAULT 1
+    can_see_sky INTEGER DEFAULT 1,
+    sky_rotation REAL default 0
 );
 """
 
@@ -82,7 +83,7 @@ class SqliteDbHelp:
 
     async def load_and_insert_consdb(self, conn: AsyncSession) -> None:
         # Load data from pickle file for testing
-        with open("tests/consdb.pkl", "rb") as f:
+        with open("tests/consdb60858.pkl", "rb") as f:
             exposures = pickle.load(f)
 
         # Insert each exposure into the database

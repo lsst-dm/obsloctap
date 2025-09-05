@@ -19,7 +19,7 @@ __all__ = ["Index", "Obsplan", "spectral_ranges"]
 
 spectral_ranges = {
     "u": [3.3e-07, 4e-07],
-    " u~nd": [3.3e-07, 4e-07],
+    "u~nd": [3.3e-07, 4e-07],
     "g": [4.02e-07, 5.52e-07],
     "g~nd": [4.02e-07, 5.52e-07],
     "r": [5.52e-07, 6.91e-07],
@@ -30,6 +30,8 @@ spectral_ranges = {
     "z~nd": [8.18e-07, 9.22e-07],
     "y": [9.22e-07, 1.06e-06],
     "y~nd": [9.22e-07, 1.06e-06],
+    "other:pinhole": [3.8e-07, 7e-07],
+    "ot~": [3.8e-07, 7e-07],
 }
 
 
@@ -103,3 +105,4 @@ class Exposure(BaseModel):
     target_name: str
     science_program: str
     scheduler_note: str
+    sky_rotation: float

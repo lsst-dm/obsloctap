@@ -1,4 +1,5 @@
 import asyncio
+import pickle
 import sys
 
 from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
@@ -16,14 +17,18 @@ def store_schedule_file(fn: str = default_fn) -> None:
 
 
 async def store_consdb_file(fn: str = consdb_fn) -> None:
+    # done in notebook in the end since
+    # but put here to remember
+    # needs to run at SLAC
     sched = MockSchedule()
     visits = sched.get_schedule24()
     start = visits["observationStartMJD"].min()
     end = visits["observationStartMJD"].max()
     # use those times to get consdb data for a test file
-    cdb: ConsDbHelp = ConsDbHelpProvider.getHelper()
-    exps = await cdb.get_exposures_between(start, end)
-    exps.to
+    cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
+    exps = await cdb.get_exposure_rows_between(start, end)
+    with open(fn, "wb") as f:
+        pickle.dump(exps, f)
 
 
 if __name__ == "__main__":

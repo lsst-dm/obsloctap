@@ -39,6 +39,7 @@ EXPOSURE_FIELDS = [
     "target_name",
     "science_program",
     "scheduler_note",
+    "sky_rotation",
 ]
 
 # Configure logging
@@ -73,9 +74,9 @@ class ConsDbHelp:
 
         return exposures
 
-    async def get_exposures_between(
+    async def get_exposure_rows_between(
         self, start: float, end: float
-    ) -> list[Exposure]:
+    ) -> Sequence[Row]:
         statement = (
             f'SELECT {self.fields} FROM {self.schema}"exposure" '
             f"WHERE obs_start_mjd >= {start} AND obs_start_mjd <= {end} "
@@ -86,6 +87,12 @@ class ConsDbHelp:
         result = await session.execute(text(statement))
         rows = result.all()
         await session.close()
+        return rows
+
+    async def get_exposures_between(
+        self, start: float, end: float
+    ) -> list[Exposure]:
+        rows = await self.get_exposure_rows_between(start, end)
         return self.process(rows)
 
 

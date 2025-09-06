@@ -102,7 +102,7 @@ class Configuration(BaseSettings):
     )
 
     consdb_database: str = Field(
-        "consdb",
+        "exposurelog",
         title="Consdb postgres database name",
         env="consdb_database",
     )

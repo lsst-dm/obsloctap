@@ -106,7 +106,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             len(plans_time),
             len(visits) - 1,
-            "Did not get correct number of vists from get schedule",
+            "Did not get correct number of visits from get schedule",
         )
 
         # just check one round trips
@@ -116,6 +116,20 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
                 break
         for key in OBSPLAN_FIELDS:
             assert plan.__dict__[key] == outplan.__dict__[key]
+
+        # seeing duplicates so running the same plan again ..
+        await dbhelp.remove_flag(obsplan)
+        await dbhelp.mark_old_obs()
+        count = await dbhelp.insert_obsplan(obsplan)
+        assert count == len(visits)
+        plans = await dbhelp.get_schedule(
+            time=0
+        )  # should get all in this case
+        self.assertEqual(
+            len(plans),
+            len(visits),
+            "Second run: incorrect number of visits from get schedule",
+        )
 
     @pytest.mark.asyncio
     async def test_update_entries(self) -> None:
@@ -161,6 +175,8 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         # 1 does not match
         plans2 = len(await dbhelp.get_schedule(time=0))
         self.assertEqual(plans2, plans + noexps + 1)  # the one not matched
+        await dbhelp.mark_obs([start])
+        # just to check that sql
 
     @pytest.mark.asyncio
     async def test_insert_exposure(self) -> None:

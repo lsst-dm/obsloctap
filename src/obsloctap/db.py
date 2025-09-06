@@ -20,7 +20,6 @@ from typing import Any, Sequence
 import astropy.units as u
 import structlog
 from astropy.time import Time, TimeDelta
-from sgp4.propagation import false
 from sqlalchemy import Row, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -294,7 +293,7 @@ class DbHelp:
         self, observations: list[Obsplan], priority: int = 2
     ) -> int:
         """Look at the obsplan table wrt to the new schedule,
-        if there is a new simlr entry remove the existing one,
+        if there is a new simlar entry remove the existing one,
         if there is a time with a different entry mark it as not observed.
         Perhaps one could also delete the not observed ones.
         Observations should be sorted on t_planning.
@@ -304,8 +303,8 @@ class DbHelp:
         if len(observations) == 0:
             return 0
         # oservations are sorted
-        maxt = observations[-1].t_planning
-        mint = observations[0].t_planning
+        mint = observations[-1].t_planning
+        maxt = observations[0].t_planning
 
         statement = (
             f"select {self.insert_fields} from "
@@ -324,26 +323,28 @@ class DbHelp:
         # loop over the old observations and match to new ones
         # both lists in descending order
         for obs in oldobs:
-            notfound = True
-            while notfound:
+            notfound: bool = True
+            while notfound and obscount < len(observations):
                 newobs: Obsplan = observations[obscount]
                 if newobs.t_min < obs.t_planning < newobs.t_max:
-                    # same time frame - check other things
-                    # - see dmtn-263 Sc 3.2
-                    if obs.em_min == newobs.em_min:
+                    # same time frame - and this is schedule
+                    # so we delete the old and put in the new
+                    #
+                    if obs.obs_id == newobs.obs_id:
                         # its a match so we replace it
                         todelete.append(obs.t_planning)
-                        notfound = false
+                        obscount += 1
+                        notfound = False
                 if obs.t_planning < newobs.t_min:
                     # need to look at the next one this is not a match
-                    obscount = obscount + 1
+                    obscount += 1
                     break
                 # anything else is mark it not observed
                 # the lists are sorted so if the currect observation is alread
                 # newer than this one its newer than te rest
                 if notfound or obs.t_planning > newobs.t_max:
                     tomark.append(obs.t_planning)
-                notfound = false
+                notfound = False
         log.info(f"delete {todelete} \n Mark {tomark}")
         await self.delete_obs(todelete)
         await self.mark_obs(tomark)
@@ -396,12 +397,12 @@ class DbHelp:
         t: Time = Time.now() + TimeDelta(30 * u.h)
 
         told = t.to_value("mjd")
-        nob = "'Not Observed'"
-        sched = "'Scheduled'"
+        nob = "Not Observed"
+        sched = "Scheduled"
         stmt = (
             f'update {self.schema}"{Obsplan.__tablename__}"'
-            f" set execution_status = {nob} "
-            f" where t_planning < {told} AND execution_status = {sched} "
+            f" set execution_status = '{nob}' "
+            f" where t_planning < {told} AND execution_status = '{sched}' "
         )
         log.debug(f"mark_old_obs: {stmt}")
         await session.execute(text(stmt))
@@ -415,8 +416,8 @@ class DbHelp:
         session = AsyncSession(self.engine)
         stmt = (
             f'update {self.schema}"{Obsplan.__tablename__}"'
-            f' set execution_status = "Not Observed" '
-            f" where t_planning in({ts})"
+            f" set execution_status = 'Not Observed' "
+            f" where t_planning in ({','.join(str(t) for t in ts)})"
         )
         log.debug(f"mark_obs: {stmt}")
         await session.execute(text(stmt))
@@ -429,7 +430,7 @@ class DbHelp:
         session = AsyncSession(self.engine)
         stmt = (
             f'delete from {self.schema}"{Obsplan.__tablename__}"'
-            f" where t_planning in ({ts})"
+            f" where t_planning in ({','.join(str(t) for t in ts)})"
         )
         log.debug(stmt)
         await session.execute(text(stmt))

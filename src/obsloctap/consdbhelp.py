@@ -83,6 +83,7 @@ class ConsDbHelp:
             f"and can_see_sky = True "
             f"ORDER BY obs_start_mjd"
         )
+        log.debug(f"Get exposures with {statement}")
         session = AsyncSession(self.engine)
         result = await session.execute(text(statement))
         rows = result.all()

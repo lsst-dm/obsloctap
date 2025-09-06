@@ -7,7 +7,7 @@ from obsloctap.schedule24h import Schedule24
 from tests.ScheduleTest import MockSchedule
 
 default_fn = "schedule24rs.pkl"
-consdb_fn = "consdb.pkl"
+consdb_fn = "consdb60858.pkl"
 
 
 def store_schedule_file(fn: str = default_fn) -> None:

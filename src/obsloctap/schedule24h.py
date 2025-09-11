@@ -70,7 +70,7 @@ class Schedule24:
     # see DMTN-263
     def format_schedule(self, visits: DataFrame) -> list[Obsplan]:
         """take the datframe from rubin sim and turn it into
-        a sorted list of Obsplan objects
+        a sorted list of Obsplan objects - sorted newest to oldest
         see also rtn-096"""
         obslist: list[Obsplan] = []
         if visits.empty:
@@ -94,8 +94,8 @@ class Schedule24:
         if obslist and len(obslist) > 0:
             obslist.sort(key=attrgetter("t_planning"), reverse=True)
             log.info(
-                f"Obsplan schedule from {obslist[0].t_planning} to "
-                f"{obslist[-1].t_planning} - with {len(obslist)} entries."
+                f"Obsplan schedule from {obslist[-1].t_planning} to "
+                f"{obslist[0].t_planning} - with {len(obslist)} entries."
             )
         return obslist
 

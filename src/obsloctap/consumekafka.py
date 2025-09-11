@@ -16,11 +16,10 @@ import json
 import logging
 import os
 import random
-import time
 
 import aiokafka
 import structlog
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 from lsst.resources import ResourcePath
 
 from obsloctap.config import Configuration
@@ -42,34 +41,40 @@ log = structlog.getLogger(__name__)
 log.info(f" sent to INFO - Log level {level}")
 # Environment variables from deployment
 
-kafka_cluster = os.environ["KAFKA_CLUSTER"]
+kafka_bootstrap = os.environ["KAFKA_BOOTSTRAP"]
 kafka_user = os.environ["KAFKA_USERNAME"]
 kafka_password = os.environ["KAFKA_PASSWORD"]
 kafka_schema_url = os.environ["SCHEMA_URL"]
 db_url = os.environ["database_url"]
-kafka_group_id = 1
+kafka_group_id = os.environ.get("KAFKA_GROUP_ID" "obsloctap-consumer")
 jaas = ("org.apache.kafka.common.security.scram.ScramLoginModule required",)
 
-# TODO this needs to be LSSTCam but that doe snot exist yet
-topic = "lsst.sal.MTHeaderService.logevent_largeFileObjectAvailable"
+# need schedule updates
+topic = "lsst.sal.Scheduler.logevent_predictedSchedule"
 sched24 = Schedule24()
 
 
 async def do_exp_updates(stopafter: int = 0) -> None:
     """this will get the consdb entries for scheduled observations
-    it never exits .. but sleeps for a fe wmoinutes"""
+    it never exits .. but sleeps for a few minutes"""
     config = Configuration()
     db: DbHelp = await DbHelpProvider.getHelper()
     # config hours - sleep is in seconds
     stime = config.exp_sleeptime * 60
-    # this will be true always unless we pass in a number which is for test
     log.info("Starting updates from consdb ")
-    count = 0
+    count = 1  # not equal to default stopafter which is only for test
     exec = 0
     entries = 0
 
     now = Time.now().to_value("mjd")
-    fillin = await db.find_last()
+    # look for the last update so NOT scheduled
+    fillin = await db.find_oldest_plan(negate=True)
+    if fillin == 0:
+        # go back 24 hours anyway
+        h24 = TimeDelta("24h")
+        fillin = (Time.now() - h24).to_value("mjd")
+        log.info(f"Did not find any observered plan going to {fillin}")
+
     cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
     exposures = await cdb.get_exposures_between(fillin, now)
     for exp in exposures:
@@ -77,22 +82,43 @@ async def do_exp_updates(stopafter: int = 0) -> None:
     log.info(
         f"Inserted {len(exposures or [])} exposures going back to {fillin}"
     )
+    lastconsdb = fillin
+    if exposures:
+        lastconsdb = exposures[-1].obs_start_mjd
 
-    while stopafter != count:
-        old = await db.find_oldest_obs()
-        log.info(f"Oldest obs MJD is {old} - now {now}")
-        if old > now:  # we may have something to do
-            cdb = await ConsDbHelpProvider.getHelper()
-            exposures = await cdb.get_exposures_between(old, now)
-            entries += await db.update_entries(exposures)
-        if count % 100 == 0:
-            log.info(
-                f"Update exposures {count} runs "
-                f"executed {exec} updates."
-                f"Updated {entries} total planning lines"
-            )
-        count += 1
-        await asyncio.sleep(stime)
+    try:
+        # this will be true always unless we pass in a number which is for test
+        while stopafter != count:
+            sleeptime = stime
+            # oldest scheduled job if it should have happened ..
+            sched = await db.find_oldest_plan()
+            now = Time.now().to_value("mjd")
+            if sched < now:  # we may have something to do it is in the past
+                cdb = await ConsDbHelpProvider.getHelper()
+                # just go back to last condb entry we got
+                exposures = await cdb.get_exposures_between(lastconsdb, now)
+                if exposures:
+                    lastconsdb = exposures[-1].obs_start_mjd
+                entries += await db.update_entries(exposures)
+                exec += 1
+            else:  # it is in the future
+                sleeptime = (sched - now) * 86400
+                log.debug(
+                    f"Oldest obs MJD is {sched} it is now {now}, "
+                    f"will sleep {sleeptime} "
+                )
+            if count % 100 == 0:
+                log.info(
+                    f"Update exposures {count} runs "
+                    f"executed {exec} updates."
+                    f"Updated {entries} total planning lines"
+                    f"Sleeping {sleeptime}s"
+                )
+            count += 1
+            # if we  have a scheduled observation could sleep until then.
+            await asyncio.sleep(sleeptime)
+    except Exception:
+        log.exception("exposure update error")
 
 
 def process_resource(resource: ResourcePath) -> None:
@@ -103,49 +129,47 @@ def process_resource(resource: ResourcePath) -> None:
 
 
 async def consume() -> None:
-    consumer = aiokafka.AIOKafkaConsumer(
-        topic,
-        bootstrap_servers=kafka_cluster,
-        group_id=f"{kafka_group_id}",
-        auto_offset_reset="earliest",
-        isolation_level="read_committed",
-        security_protocol="SASL_PLAINTEXT",
-        sasl_mechanism="SCRAM-SHA-512",
-        sasl_plain_username=kafka_user,
-        sasl_plain_password=kafka_password,
-    )
-    await consumer.start()
     try:
+        consumer = aiokafka.AIOKafkaConsumer(
+            topic,
+            bootstrap_servers=kafka_bootstrap,
+            group_id=f"{kafka_group_id}",
+            auto_offset_reset="earliest",
+            isolation_level="read_committed",
+            security_protocol="SASL_PLAINTEXT",
+            sasl_mechanism="SCRAM-SHA-512",
+            sasl_plain_username=kafka_user,
+            sasl_plain_password=kafka_password,
+        )
+        await consumer.start()
         async for msg in consumer:
             message = msg.value
             resource = ResourcePath(message.url)
             while not resource.exists():
-                # only does it once per exec/day
-                await sched24.get_update_schedule24()
-                time.sleep(random.uniform(0.1, 2.0))
+                await asyncio.sleep(random.uniform(0.1, 2.0))
             process_resource(resource)
 
+    except Exception:
+        log.exception("Consumer error")
     finally:
         await consumer.stop()
 
 
+async def runall() -> None:
+    try:
+        await asyncio.gather(
+            do_exp_updates(),
+            sched24.do24hs(),
+            consume(),
+        )
+    except Exception:
+        log.exception("Encountered an error")
+
+
 runner = asyncio.Runner()
-log.info("exposure update")
 try:
-    runner.run(do_exp_updates())
+    runner.run(runall())
 except Exception:
-    log.exception("exposure update error")
-
-log.info("24h schedule")
-try:
-    runner.run(sched24.do24hs())
-except Exception:
-    log.exception("24h schedule error")
-
-try:
-    log.info("Not running kafka")
-    # runner.run(consume())
-except Exception as e:
-    log.error(e)
-
-runner.close()
+    log.exception("Runner failed")
+finally:
+    runner.close()

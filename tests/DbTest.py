@@ -137,9 +137,11 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         visits = pd.read_pickle("tests/schedule24rs.pkl")
         obsplan = Schedule24().format_schedule(visits)
         await dbhelp.insert_obsplan(obsplan)
-        oldest = await dbhelp.find_oldest_obs()
+        oldest = await dbhelp.find_oldest_plan()
         # now we have visits get exposures
-
+        # but test negate
+        fillin = await dbhelp.find_oldest_plan(negate=True)
+        self.assertEqual(fillin, 0, " Nothign is observed ")
         helper = await TestConsdb.setup_db()
         start = 60858.98263978243
         assert oldest < start
@@ -176,6 +178,8 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         plans2 = len(await dbhelp.get_schedule(time=0))
         self.assertEqual(plans2, plans + noexps + 1)  # the one not matched
         await dbhelp.mark_obs([start])
+        fillin = await dbhelp.find_oldest_plan(negate=True)
+        self.assertGreater(fillin, 0, " Somethign should have been  observed ")
         # just to check that sql
 
     @pytest.mark.asyncio

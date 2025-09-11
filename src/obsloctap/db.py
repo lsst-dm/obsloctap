@@ -345,45 +345,35 @@ class DbHelp:
                 if notfound or obs.t_planning > newobs.t_max:
                     tomark.append(obs.t_planning)
                 notfound = False
-        log.info(f"delete {todelete} \n Mark {tomark}")
         await self.delete_obs(todelete)
         await self.mark_obs(tomark)
         return len(tomark or [])
 
-    async def find_last(self) -> float:
+    async def find_oldest_plan(
+        self, status: str = "Scheduled", negate: bool = False
+    ) -> float:
         """Look for entries with t_planning  in the past and it is still
-        scheduled(status), the oldes one will give the start time to seach for
+        status(default scheduled may never be anything else),
+        do the opposite query if negate is true
+        the oldes one will give the start time to seach for
         expoosures end time can be now
+
         """
+        comp = "="
+        if negate:
+            comp = "<>"
         session = AsyncSession(self.engine)
         statement = (
             f"select t_planning as t from "
             f'{self.schema}"{Obsplan.__tablename__}"'
+            f" where t_planning > 0 and execution_status {comp} '{status}' "
             f" order by t_planning DESC limit 1 "
         )
+        log.debug(statement)
         res = await session.execute(text(statement))
         val = res.fetchone()
         await session.close()
-        if val:
-            return val[0]
-        else:
-            return 0
-
-    async def find_oldest_obs(self, status: str = "Scheduled") -> float:
-        """Look for entries with t_planning  in the past and it is still
-        scheduled(status), the oldes one will give the start time to seach for
-        expoosures end time can be now
-        """
-        session = AsyncSession(self.engine)
-        statement = (
-            f"select min(t_planning) as t from "
-            f'{self.schema}"{Obsplan.__tablename__}"'
-            f" where execution_status = '{status}' "
-        )
-        res = await session.execute(text(statement))
-        val = res.fetchone()
-        await session.close()
-        if val:
+        if val and val[0]:
             return val[0]
         else:
             return 0

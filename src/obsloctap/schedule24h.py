@@ -121,10 +121,17 @@ class Schedule24:
         # this will be tru always unless we pass in a number which is for test
         log.info("Starting 24hr schedule updates ")
         while stopafter != self.count:
-            await self.get_update_schedule24()
-            self.count = self.count + 1
-            log.info(
-                f"24h schedule getter sleeping for {stime} seconds. "
-                f"{self.count} runs."
-            )
-            await asyncio.sleep(stime)
+            slp = stime
+            try:
+                await self.get_update_schedule24()
+                log.info(
+                    f"24h schedule getter sleeping for {stime} seconds. "
+                    f"{self.count} runs."
+                )
+                self.count = self.count + 1
+            except PermissionError:
+                slp = 60 * 60
+                log.exception(
+                    f"Problem with 24 hour schedule - will try agin in {slp}s"
+                )
+            await asyncio.sleep(slp)

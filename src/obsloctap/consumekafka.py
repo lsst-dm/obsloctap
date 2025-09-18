@@ -25,6 +25,7 @@ from lsst.resources import ResourcePath
 from obsloctap.config import Configuration
 from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
 from obsloctap.db import DbHelp, DbHelpProvider
+from obsloctap.PredictedSchedule import convert_predicted
 from obsloctap.schedule24h import Schedule24
 
 # Configure logging
@@ -102,7 +103,7 @@ async def do_exp_updates(stopafter: int = 0) -> None:
                 entries += await db.update_entries(exposures)
                 exec += 1
             else:  # it is in the future
-                sleeptime = (sched - now) * 86400
+                sleeptime = round(sched - now, 0) * 86400
                 log.debug(
                     f"Oldest obs MJD is {sched} it is now {now}, "
                     f"will sleep {sleeptime} "
@@ -121,11 +122,12 @@ async def do_exp_updates(stopafter: int = 0) -> None:
         log.exception("exposure update error")
 
 
-def process_resource(resource: ResourcePath) -> None:
+async def process_resource(resource: ResourcePath) -> None:
+    log.info(f"Processing kafka - {resource}")
     content = json.loads(resource.read())
-    print(content)  # TODO remove
-    print("Not processing yet - just printing")
-    # TODO create Obsplan use dbhelp to do the insert ..
+    plan = convert_predicted(content)
+    db: DbHelp = await DbHelpProvider.getHelper()
+    db.insert_obsplan(plan)
 
 
 async def consume() -> None:
@@ -147,7 +149,7 @@ async def consume() -> None:
             resource = ResourcePath(message.url)
             while not resource.exists():
                 await asyncio.sleep(random.uniform(0.1, 2.0))
-            process_resource(resource)
+            await process_resource(resource)
 
     except Exception:
         log.exception("Consumer error")

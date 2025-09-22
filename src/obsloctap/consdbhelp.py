@@ -84,7 +84,7 @@ class ConsDbHelp:
             f"ORDER BY obs_start_mjd"
         )
         log.debug(f"Get exposures with {statement}")
-        session = AsyncSession(self.engine)
+        session = self.get_session()
         result = await session.execute(text(statement))
         rows = result.all()
         await session.close()

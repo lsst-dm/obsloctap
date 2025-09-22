@@ -87,10 +87,9 @@ async def do_exp_updates(stopafter: int = 0) -> None:
     if exposures:
         lastconsdb = exposures[-1].obs_start_mjd
 
-    try:
         # this will be true always unless we pass in a number which is for test
-        while stopafter != count:
-            sleeptime = stime
+    while stopafter != count:
+        try:
             # oldest scheduled job if it should have happened ..
             sched = await db.find_oldest_plan()
             now = Time.now().to_value("mjd")
@@ -102,11 +101,12 @@ async def do_exp_updates(stopafter: int = 0) -> None:
                     lastconsdb = exposures[-1].obs_start_mjd
                 entries += await db.update_entries(exposures)
                 exec += 1
+                sleeptime = stime
             else:  # it is in the future
-                sleeptime = round(sched - now, 0) * 86400
+                sleeptime = round(sched - now, 1) * 86400
                 log.debug(
                     f"Oldest obs MJD is {sched} it is now {now}, "
-                    f"will sleep {sleeptime} "
+                    f"exposure update will sleep {sleeptime} "
                 )
             if count % 100 == 0:
                 log.info(
@@ -118,8 +118,13 @@ async def do_exp_updates(stopafter: int = 0) -> None:
             count += 1
             # if we  have a scheduled observation could sleep until then.
             await asyncio.sleep(sleeptime)
-    except Exception:
-        log.exception("exposure update error")
+        except Exception:
+            # back off
+            sleeptime = 2 * sleeptime
+            ConsDbHelpProvider.consdb_helper = (
+                None  # make it get a new connection
+            )
+            log.exception("exposure update error")
 
 
 async def process_resource(resource: ResourcePath) -> None:

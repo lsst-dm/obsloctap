@@ -131,6 +131,36 @@ class Configuration(BaseSettings):
         env="consdb_schema",
     )
 
+    kafka_schema_url: str = Field(
+        "http://sasquatch-schema-registry.sasquatch:8081",
+        title="Schemas for Kafka/Sasquatch",
+        env="SCHEMA_URL",
+    )
+
+    kafka_bootstrap: str = Field(
+        "sasquatch-kafka-bootstrap.sasquatch:9092",
+        title="bootstrap url for sasquatch",
+        env="KAFKA_BOOTSTRAP",
+    )
+
+    kafka_group_id: str = Field(
+        "obsloctap-consumer",
+        title="group id",
+        env="KAFKA_GROUP_ID",
+    )
+
+    kafka_user: str = Field(
+        "obsloctap",
+        title="User for sasquatch ",
+        env="KAFKA_USERNAME",
+    )
+
+    kafka_password: str = Field(
+        "",
+        title="password  for sasquatch user ",
+        env="KAFKA_PASSWORD",
+    )
+
 
 config = Configuration()
 """Configuration for obsloctap."""

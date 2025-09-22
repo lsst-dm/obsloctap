@@ -180,6 +180,8 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         await dbhelp.mark_obs([start])
         fillin = await dbhelp.find_oldest_plan(negate=True)
         self.assertGreater(fillin, 0, " Somethign should have been  observed ")
+        # is it the oldest ?  60858.98263978243
+        self.assertLessEqual(fillin, 60858.98263978243, "Not  old enough plan")
         # just to check that sql
 
     @pytest.mark.asyncio

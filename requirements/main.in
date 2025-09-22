@@ -27,7 +27,5 @@ db-sqlite3
 numpy
 boto3
 rubin_sim>=2.2.3
-summit_utils
-#urllib3<1.27
-#pydantic<2.0.0
-# this causes lot of whacky errors lsst-efd-client
+#summit_utils
+types-requests

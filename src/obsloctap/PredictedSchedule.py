@@ -16,6 +16,8 @@ then foirmat to obsplan and store in DB.
 
 __all__ = ["convert_predicted"]
 
+import math
+
 from pandas import DataFrame
 
 from obsloctap.models import Obsplan
@@ -45,7 +47,7 @@ SINGLE_COLS = [
 
 def convert_predicted(msg: DataFrame) -> list[Obsplan]:
     """The predicted schedule msg which is in EFD or comes from Kakfa
-    contians all the columns defined in COLS but all in one row with e.g
+    contains all the columns defined in COLS but all in one row with e.g
     s_ra_1 s_ra_2. So need to parse that out to someting usefull"""
 
     plan = []
@@ -60,4 +62,24 @@ def convert_predicted(msg: DataFrame) -> list[Obsplan]:
         if p.t_planning and p.t_planning > 0:
             plan.append(p)
         count += 1
+    return plan
+
+
+def convert_predicted_kafka(msg: dict) -> list[Obsplan]:
+    plan = []
+    max = msg["numberOfTargets"]
+    # nexp is a float
+    msg["nexp"] = [
+        0 if (isinstance(v, float) and math.isnan(v)) else int(v)
+        for v in msg["nexp"]
+    ]
+    for count in range(max):
+        p = Obsplan()
+        for cc in range(0, len(COLS)):
+            v = msg[COLS[cc]][count]
+            p.__setattr__(TO_COLS[cc], v)
+            cc += 1
+        p.priority = 2  # more likely than 24 hr schedule
+        if p.t_planning and p.t_planning > 0:
+            plan.append(p)
     return plan

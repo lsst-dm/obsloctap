@@ -78,7 +78,7 @@ class Obsplan(BaseModel):
     o_ucd: str = "phot.flux.density"  # phot.flux.density?
     pol_states: str = ""
     pol_xel: int = 0
-    facility_name: str = "Vera C. Rubin Observatory"
+    facility_name: str = "Rubin:Simonyi"
     instrument_name: str = "LSSTCam"  # dataId[’instrument’]
     t_plan_exptime: float = 30.0  # logevent_predictedSchedule.mjd
     category: str = "Fixed"

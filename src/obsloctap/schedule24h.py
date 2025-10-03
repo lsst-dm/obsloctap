@@ -64,7 +64,7 @@ class Schedule24:
             visits = sim_archive.fetch_obsloctap_visits(nights=1)
         if type(visits) is not DataFrame:
             visits = DataFrame(visits)
-            log.info(f"Got {visits.size} for 24 hour schedule")
+        log.info(f"Got {visits.size} for 24 hour schedule")
         return visits
 
     # see DMTN-263

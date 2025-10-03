@@ -10,15 +10,14 @@ from tests.ScheduleTest import MockSchedule
 default_fn = "schedule24rs.pkl"
 consdb_fn = "consdb60858.pkl"
 msg_fn = "message.pkl"
-schema_fn = "schema.pkl"
+schema_fn = "schema2191.pkl"
 # Environment variables from deployment
 
 
 async def dump_msg() -> None:
     schema = get_schema()
-    with open(schema, "wb") as f:
+    with open(schema_fn, "wb") as f:
         pickle.dump(schema, f)
-
     consumer = get_consumer()
     print(f"Starting consumer {consumer} ")
     await consumer.start()
@@ -51,10 +50,12 @@ async def store_consdb_file(fn: str = consdb_fn) -> None:
 
 
 if __name__ == "__main__":
+    done = False
     if "msg" in sys.argv:
         asyncio.run(dump_msg())
-        exit
+        done = True
     if "consdb" in sys.argv:
         asyncio.run(store_consdb_file())
-        exit
-    store_schedule_file()
+        done = True
+    if not done:
+        store_schedule_file()

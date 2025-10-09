@@ -161,6 +161,12 @@ class Configuration(BaseSettings):
         env="KAFKA_PASSWORD",
     )
 
+    salIndex: int = Field(
+        1,
+        title="Which predicted schedule messages to lookat ",
+        env="salIndex",
+    )
+
 
 config = Configuration()
 """Configuration for obsloctap."""

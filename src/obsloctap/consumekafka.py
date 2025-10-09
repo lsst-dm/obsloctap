@@ -13,6 +13,7 @@
 
 import io
 import json
+import math
 import struct
 from typing import Any
 
@@ -21,10 +22,11 @@ import httpx
 import structlog
 from aiokafka import ConsumerRecord
 from fastavro import parse_schema, schemaless_reader
+from pandas import DataFrame
 
 from obsloctap.config import config
 from obsloctap.db import DbHelp, DbHelpProvider
-from obsloctap.PredictedSchedule import convert_predicted_kafka
+from obsloctap.models import Obsplan
 
 # Configure logging
 log = structlog.getLogger(__name__)
@@ -32,13 +34,82 @@ jaas = ("org.apache.kafka.common.security.scram.ScramLoginModule required",)
 
 # need schedule updates
 topic = "lsst.sal.Scheduler.logevent_predictedSchedule"
-
 SCHEMA: dict | None = None
+
+COLS = [  # as in the schedule message Kafka or EFD
+    "mjd",
+    "ra",
+    "decl",
+    "exptime",
+    "nexp",
+    "rotSkyPos",
+]
+TO_COLS = [  # as in the ObPlan object
+    "t_planning",
+    "s_ra",
+    "s_dec",
+    "t_exptime",
+    "rubin_nexp",
+    "rubin_rot_sky_pos",
+]
+SINGLE_COLS = [
+    "instrumentConfiguration",
+    "numberOfTargets",
+    "private_efdStamp",
+]
+
+
+def convert_predicted(msg: DataFrame) -> list[Obsplan]:
+    """The predicted schedule msg which is in EFD or comes from Kakfa
+    contains all the columns defined in COLS but all in one row with e.g
+    s_ra_1 s_ra_2. So need to parse that out to someting usefull"""
+
+    plan = []
+    count = 0
+    while f"{COLS[0]}{count}" in msg.columns:
+        p = Obsplan()
+        for cc in range(0, len(COLS)):
+            v = msg[f"{COLS[cc]}{count}"].head().values[0]
+            p.__setattr__(TO_COLS[cc], v)
+            cc += 1
+        p.priority = 2  # more likely than 24 hr schedule
+        if p.t_planning and p.t_planning > 0:
+            plan.append(p)
+        count += 1
+    return plan
+
+
+def convert_predicted_kafka(msg: dict) -> list[Obsplan]:
+    plan = []
+    max = msg["numberOfTargets"]
+    # nexp is a float  , mjd can be 0.0
+    for count in range(len(msg["mjd"])):
+        if msg["mjd"][count] == 0.0:
+            next
+        p = Obsplan()
+        nexp = msg["nexp"][count]
+        msg["nexp"][count] = (
+            0 if (isinstance(nexp, float) and math.isnan(nexp)) else int(nexp)
+        )
+        for cc in range(0, len(COLS)):
+            v = msg[COLS[cc]][count]
+            p.__setattr__(TO_COLS[cc], v)
+            cc += 1
+        p.priority = 2  # more likely than 24 hr schedule
+        if p.t_planning and p.t_planning > 0:
+            plan.append(p)
+    if len(plan) < max:
+        log.info(
+            "Predicted message says {max} targets but only "
+            "{len(plan)} have t_planning>0"
+        )
+    return plan
 
 
 def get_schema(schema_id: int = 2191) -> dict:
     global SCHEMA
     if not SCHEMA:
+        log.debug(f"Get schema id: {schema_id}")
         schema_url = config.kafka_schema_url
         with httpx.Client(timeout=10.0) as client:
             r = client.get(f"{schema_url}/schemas/ids/{schema_id}")
@@ -61,17 +132,27 @@ def unpack_message(msg: ConsumerRecord) -> dict:
     magic = value[0]
     assert magic == 0, "Not Confluent Avro wire format"
     schema_id = struct.unpack(">I", value[1:5])[0]
-    log.debug(f"Schema id {schema_id}")
     schema = get_schema(schema_id)
     return unpack_value(value, schema)
 
 
 async def process_message(msg: ConsumerRecord) -> None:
-    log.info(f"Processing kafka - {msg}")
+    log.info(
+        f"Processing kafka - {msg['topic']} {msg['timestamp']} "
+        f"index: {[msg['salIndex']]}"
+    )
+    if msg["salIndex"] != config.salIndex:
+        log.info(f"Skipping message - salIndex not {config.salIndex}")
+        return
     record = unpack_message(msg)
-    log.debug(record)
+    # log.debug(record)
     plan = convert_predicted_kafka(record)
+    log.info(
+        f"Got {record['numberOfTargets']} numberOfTargets "
+        f"converted to {len(plan)} Obsplans"
+    )
     db: DbHelp = await DbHelpProvider.getHelper()
+    await db.remove_flag(plan)
     await db.insert_obsplan(plan)
 
 

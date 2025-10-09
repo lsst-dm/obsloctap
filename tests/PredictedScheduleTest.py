@@ -7,14 +7,12 @@ import pytest
 
 from obsloctap.config import config
 from obsloctap.consdbhelp import ConsDbHelpProvider
-from obsloctap.consumekafka import unpack_value
-from obsloctap.db import DbHelpProvider
-
-# from obsloctap.consumekafka import get_schema, unpack_message
-from obsloctap.PredictedSchedule import (
+from obsloctap.consumekafka import (
     convert_predicted,
     convert_predicted_kafka,
+    unpack_value,
 )
+from obsloctap.db import DbHelpProvider
 from obsloctap.schedule24h import Schedule24
 from obsloctap.ScheduleLoop import do_exp_updates
 from tests.ConsdbTest import TestConsdb
@@ -43,11 +41,14 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
         with open("tests/predicted_message.pkl", "rb") as f:
             msg = pickle.load(f)
         msg_dict: dict = unpack_value(msg.value, schema)
-        self.assertGreaterEqual(
-            len(msg_dict["ra"]), 33, " Not enough items in message"
-        )
+
         plan = convert_predicted_kafka(msg_dict)
-        self.assertGreater(len(plan), 0, " shoudlhave something")
+        # num targets is 4 bu only one has time
+        self.assertEqual(
+            len(plan),
+            1,  # msg_dict["numberOfTargets"],
+            "Incorrect number of plan elements",
+        )
 
     async def test_kafka(self) -> None:
         # Load data from pickle file for testing

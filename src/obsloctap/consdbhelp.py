@@ -86,8 +86,8 @@ async def do_exp_updates(stopafter: int = 0) -> int:
             session = db.get_session()
             for exp in exposures:
                 await db.insert_exposure(exp, session)
-            session.commit()
-            session.close()
+            await session.commit()
+            await session.close()
             log.info(
                 f"Inserted {len(exposures or [])} exp going back to {fillin}"
             )

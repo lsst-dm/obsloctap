@@ -77,8 +77,8 @@ class Schedule24:
             return obslist
         for ind, v in visits.iterrows():
             obs = Obsplan()
-            obs.target_name = v["target_name"]  # shoudl be scheduler_note
-            obs.obs_id = v["target_name"]
+            obs.target_name = v["target_name"]  # should be scheduler_note
+            obs.obs_id = v["target_name"]  # target_id is not passed
             obs.priority = 2
             obs.execution_status = "Scheduled"
             obs.s_ra = v["fieldRA"]
@@ -90,6 +90,10 @@ class Schedule24:
             spectral_range = spectral_ranges[v["band"]]
             obs.em_min = spectral_range[0]
             obs.em_max = spectral_range[1]
+            obs.t_plan_exptime = v["visitExposureTime"]
+            obs.t_exptime = v["visitExposureTime"]
+            # can have this when simulator provides it
+            # obs.rubin_rot_sky_pos = v["sky_angle"]
             obslist.append(obs)
         if obslist and len(obslist) > 0:
             obslist.sort(key=attrgetter("t_planning"), reverse=True)

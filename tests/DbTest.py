@@ -15,7 +15,7 @@ from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
 from obsloctap.db import OBSPLAN_FIELDS, DbHelp
 from obsloctap.models import Obsplan
 from obsloctap.schedule24h import Schedule24
-from tests.ConsdbTest import TestConsdb
+from tests.ConsdbTest import TestConsdb, consdbendless2, consdbstarttime
 from tests.DBmock import SqliteDbHelp
 
 
@@ -143,7 +143,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         fillin = await dbhelp.find_oldest_plan(negate=True)
         self.assertEqual(fillin, 0, " Nothign is observed ")
         helper = await TestConsdb.setup_db()
-        start = 60858.98263978243
+        start = consdbstarttime
         assert oldest < start
 
         plans = len(await dbhelp.get_schedule(time=0))
@@ -152,7 +152,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         # Updates are only updating
 
         # skip 2
-        end = 60859.98263978243
+        end = consdbendless2
         exposures = await helper.get_exposures_between(start, end)
         noexps = len(exposures)
         res = await dbhelp.update_entries(exposures)
@@ -162,6 +162,9 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         assert plans2 == plans + noexps
         # lets modify N entries to get them updated
         N = 4
+        self.assertGreater(
+            len(exposures), N, " there are not enough exposures"
+        )
         for i in range(1, N):
             exposures[i].s_ra = obsplan[i].s_ra
             exposures[i].s_dec = obsplan[i].s_dec
@@ -174,7 +177,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         # now exposures not matching are added as observations
         # that happened above and they will be updated this time
         self.assertEqual(res, noexps - 1)  # should have updated the exposures
-        # 1 does not match
+        # 1 does not match dont know why
         plans2 = len(await dbhelp.get_schedule(time=0))
         self.assertEqual(plans2, plans + noexps + 1)  # the one not matched
         await dbhelp.mark_obs([start])
@@ -190,7 +193,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         # Load exposure from pickle file for testing
         plans = len(await dbhelp.get_schedule(time=0))
         assert plans == 0  # should be empty
-        with open("tests/consdb.pkl", "rb") as f:
+        with open("tests/consdb60858.pkl", "rb") as f:
             exposures = pickle.load(f)
         cdbh: ConsDbHelp = await ConsDbHelpProvider.getHelper()
         exps = cdbh.process(exposures)

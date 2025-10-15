@@ -105,4 +105,6 @@ class Exposure(BaseModel):
     target_name: str
     science_program: str
     scheduler_note: str
+    can_see_sky: int
     sky_rotation: float
+    observation_reason: str

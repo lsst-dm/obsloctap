@@ -47,7 +47,9 @@ EXPOSURE_FIELDS = [
     "target_name",
     "science_program",
     "scheduler_note",
+    "can_see_sky",
     "sky_rotation",
+    "observation_reason",
 ]
 
 # Configure logging

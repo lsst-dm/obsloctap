@@ -237,7 +237,8 @@ class DbHelp:
             f"0, "  # t_planning
             f"'{exp.target_name}', "  # target_name
             f"'{str(exp.exposure_id)}', "  # obs_id
-            f"'{exp.scheduler_note}', "  # obs_collection
+            f"'{exp.observation_reason}-{exp.scheduler_note}', "
+            # obs_collection
             f"{exp.s_ra}, "  # s_ra
             f"{exp.s_dec}, "  # s_dec
             f"3, "  # s_fov

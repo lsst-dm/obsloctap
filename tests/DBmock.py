@@ -4,7 +4,11 @@ import pickle
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import text
 
-from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
+from obsloctap.consdbhelp import (
+    EXPOSURE_FIELDS,
+    ConsDbHelp,
+    ConsDbHelpProvider,
+)
 from obsloctap.db import DbHelp, DbHelpProvider
 
 __all__ = ["SqliteDbHelp"]
@@ -23,7 +27,8 @@ CREATE TABLE exposure (
     science_program TEXT,
     scheduler_note TEXT,
     can_see_sky INTEGER DEFAULT 1,
-    sky_rotation REAL default 0
+    sky_rotation REAL default 0,
+    observation_reason TEXT
 );
 """
 
@@ -39,6 +44,8 @@ columns_types = {
     "science_program": str,
     "scheduler_note": str,
     "can_see_sky": int,
+    "sky_rotation": float,
+    "observation_reason": str,
 }
 
 
@@ -86,29 +93,32 @@ class SqliteDbHelp:
         with open("tests/consdb60858.pkl", "rb") as f:
             exposures = pickle.load(f)
 
-        # Insert each exposure into the database
-        insert_sql = text(
-            """
-            INSERT INTO exposure (
-                exposure_id, obs_start_mjd, obs_end_mjd, band,
-                physical_filter, s_ra, s_dec,
-                target_name, science_program, scheduler_note
-            ) VALUES (
-                :exposure_id, :obs_start_mjd, :obs_end_mjd, :band,
-                :physical_filter, :s_ra, :s_dec,
-                :target_name, :science_program, :scheduler_note
-            )
-        """
+        # Generate columns and named parameters
+        columns = ", ".join(EXPOSURE_FIELDS)
+        placeholders = ", ".join(
+            f":{field}" for field in EXPOSURE_FIELDS  # noqa: E231
         )
+
+        insert_sql = text(
+            f"""
+            INSERT INTO exposure ({columns})
+                VALUES ({placeholders})
+            """
+        )
+        print(insert_sql)
+        # Insert each exposure into the database
 
         for exp in exposures:
             exp_dict = {}
+            c = 0
+            assert len(exp) == len(columns_types)
             for col, typ in columns_types.items():
-                val = exp.get(col)
+                val = exp[c]
                 if val is not None:
                     exp_dict[col] = typ(val)
                 else:
                     exp_dict[col] = None
+                c += 1
             await conn.execute(insert_sql, exp_dict)
         await conn.commit()
 

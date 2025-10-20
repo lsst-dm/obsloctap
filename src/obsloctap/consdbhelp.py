@@ -180,10 +180,15 @@ class ConsDbHelp:
             f"ORDER BY obs_start_mjd"
         )
         log.debug(f"Get exposures with {statement}")
-        session = self.get_session()
-        result = await session.execute(text(statement))
-        rows = result.all()
-        await session.close()
+        rows: Sequence[Row] = []
+        try:
+            session = self.get_session()
+            result = await session.execute(text(statement))
+            rows = result.all()
+        except Exception as e:
+            log.error(f"Failed to get exposures {type(e).__name__} : {e}")
+        finally:
+            await session.close()
         return rows
 
     async def get_exposures_between(

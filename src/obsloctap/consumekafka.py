@@ -157,6 +157,10 @@ async def process_message(msg: ConsumerRecord) -> None:
 
 
 def get_consumer() -> aiokafka.AIOKafkaConsumer:
+    log.info(
+        f"Setting up consumer with bootstrap {config.kafka_bootstrap}  "
+        f"group {config.kafka_group_id} user {config.kafka_user}"
+    )
     return aiokafka.AIOKafkaConsumer(
         topic,
         bootstrap_servers=config.kafka_bootstrap,
@@ -172,7 +176,7 @@ def get_consumer() -> aiokafka.AIOKafkaConsumer:
 
 async def consume() -> None:
     try:
-        log.info(f"Starting consumer for {topic}")
+        log.info(f"Starting consumer for {topic} ")
         consumer = get_consumer()
         await consumer.start()
         async for msg in consumer:

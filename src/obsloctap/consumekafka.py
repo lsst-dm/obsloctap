@@ -95,7 +95,7 @@ def convert_predicted_kafka(msg: dict) -> list[Obsplan]:
             v = msg[COLS[cc]][count]
             p.__setattr__(TO_COLS[cc], v)
             cc += 1
-        p.priority = 2  # more likely than 24 hr schedule
+        p.priority = 1  # more likely than 24 hr schedule
         if p.t_planning and p.t_planning > 0:
             plan.append(p)
     if len(plan) < max:

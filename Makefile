@@ -1,6 +1,6 @@
 .PHONY: update-deps
 update-deps:
-	pip install --upgrade pip-tools pip setuptools
+	pip install --upgrade pip-tools setuptools #pip
 	pip-compile --upgrade --resolver=backtracking --build-isolation --generate-hashes --output-file requirements/main.txt requirements/main.in
 	pip-compile --upgrade --resolver=backtracking --build-isolation --generate-hashes --output-file requirements/dev.txt requirements/dev.in
 
@@ -25,3 +25,12 @@ update: update-deps init
 .PHONY: run
 run:
 	tox run -e run
+
+consume:
+	docker  build  . -f Dockerfile.consumekafka -t consumekafka
+
+obsloctap:
+	docker  build  . -f Dockerfile.obsloctap -t obsloctap
+
+runlocal:
+	uvicorn obsloctap.main:app

@@ -1,20 +1,5 @@
-# This Dockerfile has four stages:
-#
-# base-image
-#   Updates the base Python image with security patches and common system
-#   packages. This image becomes the base of all other images.
-# dependencies-image
-#   Installs third-party dependencies (requirements/main.txt) into a virtual
-#   environment. This virtual environment is ideal for copying across build
-#   stages.
-# install-image
-#   Installs the app into the virtual environment.
-# runtime-image
-#   - Copies the virtual environment into place.
-#   - Runs a non-root user.
-#   - Sets up the entrypoint and port.
 
-FROM python:3.13.6-slim-bullseye as base-image
+FROM python:3.13.6-slim-bullseye AS base-image
 
 # Update system packages
 COPY scripts/install-base-packages.sh .
@@ -44,6 +29,8 @@ FROM dependencies-image AS install-image
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY . /workdir
+COPY static /workdir/static
+
 WORKDIR /workdir
 RUN pip install --no-cache-dir .
 
@@ -55,6 +42,13 @@ RUN useradd --create-home appuser
 # Copy the virtualenv
 COPY --from=install-image /opt/venv /opt/venv
 
+WORKDIR /app
+
+# bring the built static assets into the runtime image
+COPY --from=install-image /workdir/static /app/static
+
+# make sure the non-root user can read the files
+RUN chown -R appuser:appuser /app
 # Make sure we use the virtualenv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -65,4 +59,4 @@ USER appuser
 EXPOSE 8080
 
 # Run the application.
-CMD ["uvicorn", "obsloctap.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "obsloctap.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]

@@ -1,3 +1,14 @@
+# This file is part of obsloctap.
+#
+# Developed for the Rubin Data Management System.
+# This product includes software developed by the Rubin Project
+# (http://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# Use of this source code is governed by a 3-clause BSD-style
+# license that can be found in the LICENSE file.
+
 """Configuration definition."""
 
 from __future__ import annotations
@@ -76,6 +87,84 @@ class Configuration(BaseSettings):
         24,
         title="Time to look back in obsplan query with time in hours",
         env="obsplanTimeSpan",
+    )
+
+    sleeptime: float = Field(
+        12,
+        title="Hours to sleep before getting 24 hour scheulde again",
+        env="sleeptime",
+    )
+
+    exp_sleeptime: float = Field(
+        2,
+        title="Minutes to sleep before looking for exposures to update plan",
+        env="exp_sleeptime",
+    )
+
+    consdb_database: str = Field(
+        "exposurelog",
+        title="Consdb postgres database name",
+        env="consdb_database",
+    )
+
+    consdb_url: str = Field(
+        "usdf-summitdb-replica.slac.stanford.edu:5432",
+        title="URL for postgres database",
+        env="consdb_url",
+    )
+
+    consdb_username: str = Field(
+        "usdf",
+        title="Consdb user for postgres database",
+        env="consdb_username",
+    )
+
+    consdb_password: str = Field(
+        "",
+        title="Consdb password for postgres database",
+        env="consdb_password",
+    )
+
+    consdb_schema: str = Field(
+        "cdb_lsstcam",
+        title="Schema for consdb postgres database",
+        env="consdb_schema",
+    )
+
+    kafka_schema_url: str = Field(
+        "http://sasquatch-schema-registry.sasquatch:8081",
+        title="Schemas for Kafka/Sasquatch",
+        env="SCHEMA_URL",
+    )
+
+    kafka_bootstrap: str = Field(
+        "sasquatch-kafka-bootstrap.sasquatch:9092",
+        title="bootstrap url for sasquatch",
+        env="KAFKA_BOOTSTRAP",
+    )
+
+    kafka_group_id: str = Field(
+        "obsloctap-consumer",
+        title="group id",
+        env="KAFKA_GROUP_ID",
+    )
+
+    kafka_user: str = Field(
+        "obsloctap",
+        title="User for sasquatch ",
+        env="KAFKA_USERNAME",
+    )
+
+    kafka_password: str = Field(
+        "",
+        title="password  for sasquatch user ",
+        env="KAFKA_PASSWORD",
+    )
+
+    salIndex: int = Field(
+        1,
+        title="Which predicted schedule messages to lookat ",
+        env="salIndex",
     )
 
 

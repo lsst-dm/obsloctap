@@ -6,6 +6,7 @@ import pytest
 from httpx import AsyncClient
 
 from obsloctap.config import config
+from obsloctap.db import DbHelpProvider, MockDbHelp
 
 
 @pytest.mark.asyncio
@@ -23,7 +24,11 @@ async def test_get_exernal_index(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_schedule(client: AsyncClient) -> None:
-    """will use mock for local esting"""
+    """will use mock for local Testing"""
+    DbHelpProvider.clear()
+    dbhelp = await DbHelpProvider.getHelper()
+    assert isinstance(dbhelp, MockDbHelp)
+
     response = await client.get(f"{config.path_prefix}/schedule")
     assert response.status_code == 200
     data = response.json()
@@ -32,3 +37,27 @@ async def test_get_schedule(client: AsyncClient) -> None:
     assert "rubin_nexp" in obs
     assert "t_planning" in obs
     assert data[0]["t_planning"] == 60032.194918981484
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_start(client: AsyncClient) -> None:
+    """will use mock for local Testing"""
+    DbHelpProvider.clear()
+    dbhelp = await DbHelpProvider.getHelper()
+    assert isinstance(dbhelp, MockDbHelp)
+
+    # ISO
+    response = await client.get(
+        f"{config.path_prefix}/schedule?start=2025-09-01"
+    )
+    assert response.status_code == 200
+    # MJD
+    response = await client.get(
+        f"{config.path_prefix}/schedule?start=60913.13"
+    )
+    assert response.status_code == 200
+    # rubish
+    response = await client.get(
+        f"{config.path_prefix}/schedule?start=tomorrow"
+    )
+    assert response.status_code == 200

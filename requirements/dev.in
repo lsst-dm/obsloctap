@@ -20,3 +20,5 @@ pytest
 pytest-asyncio
 pytest-cov
 greenlet
+black
+aiosqlite

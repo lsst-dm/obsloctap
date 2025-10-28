@@ -1,6 +1,21 @@
+# This file is part of obsloctap.
+#
+# Developed for the Rubin Data Management System.
+# This product includes software developed by the Rubin Project
+# (http://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# Use of this source code is governed by a 3-clause BSD-style
+# license that can be found in the LICENSE file.
+
 """Handlers for the app's external root, ``/obsloctap/``."""
 
+import logging
+
+from astropy.time import Time, TimeDelta
 from fastapi import APIRouter, Depends
+from fastapi.params import Query
 from safir.dependencies.logger import logger_dependency
 from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
@@ -13,6 +28,11 @@ __all__ = ["get_index", "external_router"]
 
 external_router = APIRouter()
 """FastAPI router for all external handlers."""
+
+# Disable uvicorn logging
+logging.getLogger("uvicorn.access").disabled = True
+logging.getLogger("uvicorn.info").disabled = True
+logging.getLogger("uvicorn.event").disabled = True
 
 
 @external_router.get(
@@ -34,7 +54,7 @@ async def get_index(
     # There is no need to log simple requests since uvicorn will do this
     # automatically, but this is included as an example of how to use the
     # logger for more complex logging.
-    logger.info("Request for application metadata")
+    logger.debug("Request for application metadata")
 
     metadata = get_metadata(
         package_name="obsloctap",
@@ -52,7 +72,32 @@ async def get_index(
     response_model_exclude_none=True,
     summary="Observation Schedule",
 )
-async def get_schedule() -> list[Obsplan]:
+async def get_schedule(
+    start: str = Query(
+        "now",
+        description="time to start from 'now' or ISO 'YYYY-MM-DD HH:MM:SS'",
+    ),
+    time: int = Query(24, description="hours[1-48] for schedule lookahead"),
+    logger: BoundLogger = Depends(logger_dependency),
+) -> list[Obsplan]:
+    logger.info(f"Schedule requested for time: {time}, start {start}")
     dbhelp = await DbHelpProvider.getHelper()
-    schedule = await dbhelp.get_schedule()
+    if start and start.lower() != "now":
+        t = Time.now() - TimeDelta("1440min")
+        success = False
+        try:
+            t = Time(start, format="iso", scale="utc")
+            success = True
+        except Exception:
+            pass
+        try:
+            t = Time(float(start), format="mjd")
+            success = True
+        except Exception:
+            pass
+
+        logger.info(f"Converted time: {success} - Using start time: {t}")
+        schedule = await dbhelp.get_schedule(time, start=t)
+    else:
+        schedule = await dbhelp.get_schedule(time)
     return schedule

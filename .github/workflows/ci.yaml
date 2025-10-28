@@ -26,9 +26,9 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.0
@@ -40,7 +40,7 @@ jobs:
     strategy:
       matrix:
         python:
-          - "3.11"
+          - "3.13"
 
     steps:
       - uses: actions/checkout@v5
@@ -89,12 +89,24 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push obsloctap
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile.obsloctap
           push: true
           tags: |
             ghcr.io/lsst-dm/obsloctap:${{ steps.vars.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push consumekafka
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.consumekafka
+          push: true
+          tags: |
+            ghcr.io/lsst-dm/consumekafka:${{ steps.vars.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

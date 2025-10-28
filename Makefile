@@ -1,8 +1,8 @@
 .PHONY: update-deps
 update-deps:
-	uv pip install --upgrade pip-tools setuptools pip
-	uv pip-compile --upgrade --resolver=backtracking --build-isolation --generate-hashes --output-file requirements/main.txt requirements/main.in
-	uv pip-compile --upgrade --resolver=backtracking --build-isolation --generate-hashes --output-file requirements/dev.txt requirements/dev.in
+	pip install --upgrade pip-tools setuptools pip
+	pip-compile --upgrade --resolver=backtracking --build-isolation --generate-hashes --output-file requirements/main.txt requirements/main.in
+	pip-compile --upgrade --resolver=backtracking --build-isolation --generate-hashes --output-file requirements/dev.txt requirements/dev.in
 
 # Useful for testing against a Git version of Safir.
 .PHONY: update-deps-no-hashes

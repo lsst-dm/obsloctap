@@ -13,6 +13,7 @@ starlette
 uvicorn
 
 # Other dependencies.
+pip<24.0
 pandas
 safir[db]>=3.4.0
 requests
@@ -26,5 +27,6 @@ pydantic_settings
 db-sqlite3
 numpy
 boto3
-rubin_sim>=2.2.3
+scikit-learn
+rubin_sim>=2.5.0
 types-requests

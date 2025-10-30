@@ -75,10 +75,16 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
 
     def test_msg(self) -> None:
         # schema = get_schema()
-        with open("tests/predicted_message.pkl", "rb") as f:
+        with open("tests/message_mt.pkl", "rb") as f:
             msg = pickle.load(f)
         assert msg
-        # plan = unpack_message(msg, schema)
+        with open("tests/schema2191.pkl", "rb") as s:
+            schema = pickle.load(s)
+        print(f"testing kafka - {msg.timestamp} " f"index: {msg.key}")
+        rec = unpack_value(msg.value, schema)
+        self.assertEqual(rec["salIndex"], config.salIndex)
+        plan = convert_predicted_kafka(rec)
+        self.assertEqual(19, len(plan), " Seem to not get all lines")
 
     @pytest.mark.asyncio
     async def test_exp_updates(self) -> None:

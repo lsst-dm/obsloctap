@@ -230,6 +230,11 @@ class DbHelp:
     async def insert_exposure(
         self, exp: Exposure, session: AsyncSession
     ) -> None:
+        if not exp.band:
+            log.warning(
+                f"{exp.exposure_id} has no band - "
+                f"will insert 'other:pinhole'"  # noqa: E231 em_max
+            )
         """put in  an obsplan line based on an exposure
         this is when consdb has an observation but it does not match
         any planned item"""
@@ -248,8 +253,10 @@ class DbHelp:
             f"{exp.obs_end_mjd}, "  # t_max
             f"{exp.obs_end_mjd - exp.obs_start_mjd}, "  # t_exptime
             f"15, "  # t_resolution
-            f"'{spectral_ranges[exp.band][0]}', "  # em_min
-            f"'{spectral_ranges[exp.band][1]}', "  # em_max
+            f"'{spectral_ranges[
+                exp.band or 'other:pinhole'][0]}', "  # noqa: E231 em_min
+            f"'{spectral_ranges[
+                exp.band or 'other:pinhole'][1]}', "  # noqa: E231 em_max
             f"0, "  # em_res_power
             f"'phot.flux.density', "  # o_ucd
             f"'', "  # pol_states

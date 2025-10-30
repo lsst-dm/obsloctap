@@ -100,8 +100,8 @@ def convert_predicted_kafka(msg: dict) -> list[Obsplan]:
             plan.append(p)
     if len(plan) < max:
         log.info(
-            "Predicted message says {max} targets but only "
-            "{len(plan)} have t_planning>0"
+            f"Predicted message says {max} targets but only "
+            f"{len(plan)} have t_planning>0"
         )
     return plan
 
@@ -127,7 +127,6 @@ def unpack_value(value: Any, schema: dict) -> dict:
 
 
 def unpack_message(msg: ConsumerRecord) -> dict:
-    log.info(f"Unpack kafka message {msg.timestamp}")
     value = msg.value  # bytes from Kafka message
     magic = value[0]
     assert magic == 0, "Not Confluent Avro wire format"
@@ -137,14 +136,11 @@ def unpack_message(msg: ConsumerRecord) -> dict:
 
 
 async def process_message(msg: ConsumerRecord) -> None:
-    log.info(
-        f"Processing kafka - {msg['topic']} {msg['timestamp']} "
-        f"index: {[msg['salIndex']]}"
-    )
-    if msg["salIndex"] != config.salIndex:
+    log.info(f"Processing kafka - {msg.key} {msg.timestamp} ")
+    record = unpack_message(msg)
+    if record["salIndex"] != config.salIndex:
         log.info(f"Skipping message - salIndex not {config.salIndex}")
         return
-    record = unpack_message(msg)
     # log.debug(record)
     plan = convert_predicted_kafka(record)
     log.info(

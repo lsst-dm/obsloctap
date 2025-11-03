@@ -29,18 +29,19 @@ async def dump_msg() -> None:
             schema = pickle.load(s)
         try:
             schema = get_schema(schema_id)
-        except Exception:
-            print(f"failed to get schems {Exception}")
+        except Exception as e:
+            print(f"failed to get schemas {e}")
 
         msg_dict = unpack_value(value, schema)
         if msg_dict["salIndex"] == 1:
             with open(f"schema{schema_id}.pkl", "wb") as f:
                 pickle.dump(schema, f)
             with open(msg_fn, "wb") as f:
+                print(f"Dumping message {msg_fn}")
                 pickle.dump(msg, f)
             break
         else:
-            print(f"Ignoring message {msg_dict['salIndex']}")
+            print(f"Ignoring message salIndex {msg_dict['salIndex']}")
     await consumer.stop()
 
 

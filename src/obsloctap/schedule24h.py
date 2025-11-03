@@ -48,10 +48,11 @@ class Schedule24:
 
     def get_schedule24(self) -> DataFrame:
         """
-        Get he 24 schedule form the rubin_sim api call
+        Get the 24 schedule form the rubin_sim api call
         Need these:
            os.environ["LSST_DISABLE_BUCKET_VALIDATION"] = "1"
            os.environ["S3_ENDPOINT_URL"] = "https://s3dfrgw.slac.stanford.edu/"
+           AWS credintials
         Returns   DataFrame of schedule entries
         -------
         """
@@ -62,6 +63,10 @@ class Schedule24:
         except TypeError:
             log.info("Dropping to 1 night for sim")
             visits = sim_archive.fetch_obsloctap_visits(nights=1)
+        except ValueError as ve:
+            log.warning(f"Error encountered while fetching visits {ve}")
+            return []
+
         if type(visits) is not DataFrame:
             visits = DataFrame(visits)
         log.info(f"Got {visits.size} for 24 hour schedule")

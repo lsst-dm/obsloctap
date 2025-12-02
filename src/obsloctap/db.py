@@ -230,11 +230,12 @@ class DbHelp:
     async def insert_exposure(
         self, exp: Exposure, session: AsyncSession
     ) -> None:
-        if not exp.band:
+        if not exp.band or exp.band not in spectral_ranges:
             log.warning(
                 f"{exp.exposure_id} has no band - "
                 f"will insert 'other:pinhole'"  # noqa: E231 em_max
             )
+            exp.band = "other:pinhole"
         """put in  an obsplan line based on an exposure
         this is when consdb has an observation but it does not match
         any planned item"""

@@ -65,7 +65,7 @@ class Schedule24:
             visits = sim_archive.fetch_obsloctap_visits(nights=1)
         except ValueError as ve:
             log.warning(f"Error encountered while fetching visits {ve}")
-            return []
+            return DataFrame(data=None)
 
         if type(visits) is not DataFrame:
             visits = DataFrame(visits)

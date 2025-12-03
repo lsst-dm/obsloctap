@@ -28,5 +28,6 @@ db-sqlite3
 numpy
 boto3
 scikit-learn
-rubin_sim>=2.5.0
+rubin_sim>=2.6.0
+psycopg2-binary
 types-requests

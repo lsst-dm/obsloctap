@@ -206,3 +206,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         await dbhelp.insert_exposure(exp, dbhelp.get_session())
         plans2 = len(await dbhelp.get_schedule(time=0))
         assert plans2 == plans + 2
+
+        exp.band = "none"  # test this
+        await dbhelp.insert_exposure(exp, dbhelp.get_session())
+        plans2 = len(await dbhelp.get_schedule(time=0))

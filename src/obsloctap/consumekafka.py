@@ -33,7 +33,7 @@ log = structlog.getLogger(__name__)
 jaas = ("org.apache.kafka.common.security.scram.ScramLoginModule required",)
 
 # need schedule updates
-topic = "lsst.sal.Scheduler.logevent_predictedSchedule"
+topic = "summit.lsst.sal.Scheduler.logevent_predictedSchedule"
 SCHEMA: dict | None = None
 
 COLS = [  # as in the schedule message Kafka or EFD

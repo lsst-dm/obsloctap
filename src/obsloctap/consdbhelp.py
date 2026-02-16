@@ -83,7 +83,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
 
         cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
         if fillin < now:
-            log.info(f"Doign consdb fillin from {fillin} to {now} ")
+            log.info(f"Doing consdb fillin from {fillin} to {now} ")
             exposures = await cdb.get_exposures_between(fillin, now)
             session = db.get_session()
             for exp in exposures:

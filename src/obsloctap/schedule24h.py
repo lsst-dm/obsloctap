@@ -84,7 +84,7 @@ class Schedule24:
             obs = Obsplan()
             obs.target_name = v["target_name"]  # should be scheduler_note
             obs.obs_id = v["target_name"]  # target_id is not passed
-            obs.priority = 2
+            obs.priority = 0
             obs.execution_status = "Scheduled"
             obs.s_ra = v["fieldRA"]
             obs.s_dec = v["fieldDec"]

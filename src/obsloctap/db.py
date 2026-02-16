@@ -396,7 +396,7 @@ class DbHelp:
         t: Time = Time.now() + TimeDelta(30 * u.h)
 
         told = t.to_value("mjd")
-        nob = "Not Observed"
+        nob = "Aborted"
         sched = "Scheduled"
         stmt = (
             f'update {self.schema}"{Obsplan.__tablename__}"'

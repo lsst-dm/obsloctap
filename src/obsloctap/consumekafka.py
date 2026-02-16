@@ -33,7 +33,10 @@ log = structlog.getLogger(__name__)
 jaas = ("org.apache.kafka.common.security.scram.ScramLoginModule required",)
 
 # need schedule updates
-topic = "lsst.sal.Scheduler.logevent_predictedSchedule"
+topic = [
+    "summit.lsst.sal.Scheduler.logevent_predictedSchedule",
+    "summit.lsst.sal.ScriptQueue.logevent_nextVisit",
+]
 SCHEMA: dict | None = None
 
 COLS = [  # as in the schedule message Kafka or EFD
@@ -72,7 +75,7 @@ def convert_predicted(msg: DataFrame) -> list[Obsplan]:
             v = msg[f"{COLS[cc]}{count}"].head().values[0]
             p.__setattr__(TO_COLS[cc], v)
             cc += 1
-        p.priority = 2  # more likely than 24 hr schedule
+        p.priority = 1  # more likely than 24 hr schedule
         if p.t_planning and p.t_planning > 0:
             plan.append(p)
         count += 1
@@ -141,7 +144,7 @@ async def process_message(msg: ConsumerRecord) -> None:
     if record["salIndex"] != config.salIndex:
         log.info(f"Skipping message - salIndex not {config.salIndex}")
         return
-    # log.debug(record)
+    log.debug(record)
     plan = convert_predicted_kafka(record)
     log.info(
         f"Got {record['numberOfTargets']} numberOfTargets "
@@ -157,8 +160,8 @@ def get_consumer() -> aiokafka.AIOKafkaConsumer:
         f"Setting up consumer with bootstrap {config.kafka_bootstrap}  "
         f"group {config.kafka_group_id} user {config.kafka_user}"
     )
-    return aiokafka.AIOKafkaConsumer(
-        topic,
+
+    consumer = aiokafka.AIOKafkaConsumer(
         bootstrap_servers=config.kafka_bootstrap,
         group_id=f"{config.kafka_group_id}",
         auto_offset_reset="earliest",
@@ -168,6 +171,8 @@ def get_consumer() -> aiokafka.AIOKafkaConsumer:
         sasl_plain_username=config.kafka_user,
         sasl_plain_password=config.kafka_password,
     )
+    consumer.subscribe(topics=topic)
+    return consumer
 
 
 async def consume() -> None:

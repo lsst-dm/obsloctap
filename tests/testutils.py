@@ -41,12 +41,8 @@ async def dump_msg() -> None:
         schema_id = struct.unpack(">I", value[1:5])[0]
         schema = {}
 
-        if schema_id == 2191:
-            with open("tests/schema2191.pkl", "rb") as s:
-                schema = pickle.load(s)
-        else:
-            with open("tests/schema317.json", "rb") as s:
-                schema = json.load(s)
+        with open(f"tests/schema{schema_id}.pkl", "rb") as s:
+            schema = pickle.load(s)
         try:
             schema = get_schema(schema_id)
         except Exception as e:
@@ -55,7 +51,7 @@ async def dump_msg() -> None:
         msg_dict = unpack_value(value, schema)
         if msg_dict["salIndex"] == 1:
             # next visit schema_id = 317
-            if "nextVisit" in msg.key["topic"]:
+            if "nextVisit" in msg.topic:
                 msg_fn = "nextVisit_mt.pkl"
             with open(f"schema{schema_id}.pkl", "wb") as f:
                 pickle.dump(schema, f)

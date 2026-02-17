@@ -42,6 +42,9 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
             msg = pickle.load(f)
         msg_dict: dict = unpack_value(msg.value, schema)
 
+        topic = msg.topic
+        self.assertTrue("predict" in topic)
+
         plan = convert_predicted_kafka(msg_dict)
         # num targets is 4 bu only one has time
         self.assertEqual(

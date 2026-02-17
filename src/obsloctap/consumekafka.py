@@ -166,7 +166,7 @@ async def process_message(msg: ConsumerRecord) -> None:
     if record["salIndex"] != config.salIndex:
         log.info(f"Skipping message - salIndex not {config.salIndex}")
         return
-    if "nextVisit" in msg.key["topic"]:
+    if "nextVisit" in msg.topic:
         log.debug(record)
         plan = convert_nextVisit(record)
     else:

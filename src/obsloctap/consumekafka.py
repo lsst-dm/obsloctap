@@ -14,7 +14,6 @@
 import io
 import json
 import math
-import os
 import pickle
 import struct
 from typing import Any
@@ -116,7 +115,8 @@ def convert_nextVisit(msg: dict) -> list[Obsplan]:
     obs = []
     schema_id = 317
     schema = get_schema(schema_id)
-    log.info(f"SCHEMA {schema_id}\n{schema}")
+    js = json.dumps(schema)
+    log.info(f"SCHEMA {schema_id}\n{js}")
     with open(f"schema{schema_id}.pkl", "wb") as f:
         pickle.dump(schema, f)
     msg_fn = "nextVisit_mt.pkl"
@@ -133,8 +133,6 @@ def get_schema(schema_id: int = 2191) -> dict:
     if schema_id not in SCHEMA:
         log.debug(f"Get schema id: {schema_id}")
         schema_url = config.kafka_schema_url
-        su = os.environ["SCHEMA_URL"]
-        log.debug(f"schema url: {schema_url} ENV SCHEMA_URL: {su}")
         with httpx.Client(timeout=10.0) as client:
             r = client.get(f"{schema_url}/schemas/ids/{schema_id}")
             r.raise_for_status()

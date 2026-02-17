@@ -19,7 +19,13 @@ schema_fn = "schema2191.pkl"
 async def env() -> None:
     # config = Configuration()
     id = 317
-    schema = get_schema(id)
+    with open(f"tests/schema{id}.json", "rb") as s:
+        schema = json.load(s)
+    try:
+        schema = get_schema(id)
+    except Exception as e:
+        print(f"failed to get schemas {e}")
+
     with open(f"schema{id}.pkl", "wb") as f:
         pickle.dump(schema, f)
 

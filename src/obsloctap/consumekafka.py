@@ -14,6 +14,8 @@
 import io
 import json
 import math
+import os
+import pickle
 import struct
 from typing import Any
 
@@ -37,7 +39,8 @@ topic = [
     "summit.lsst.sal.Scheduler.logevent_predictedSchedule",
     "summit.lsst.sal.ScriptQueue.logevent_nextVisit",
 ]
-SCHEMA: dict | None = None
+
+SCHEMA: dict = {}
 
 COLS = [  # as in the schedule message Kafka or EFD
     "mjd",
@@ -109,18 +112,37 @@ def convert_predicted_kafka(msg: dict) -> list[Obsplan]:
     return plan
 
 
+def convert_nextVisit(msg: dict) -> list[Obsplan]:
+    obs = []
+    schema_id = 317
+    schema = get_schema(schema_id)
+    log.info(f"SCHEMA {schema_id}\n{schema}")
+    with open(f"schema{schema_id}.pkl", "wb") as f:
+        pickle.dump(schema, f)
+    msg_fn = "nextVisit_mt.pkl"
+    with open(msg_fn, "wb") as f:
+        print(f"Dumping message {msg_fn}")
+        pickle.dump(msg, f)
+    plan = Obsplan()
+    obs = [plan]
+    return obs
+
+
 def get_schema(schema_id: int = 2191) -> dict:
     global SCHEMA
-    if not SCHEMA:
+    if schema_id not in SCHEMA:
         log.debug(f"Get schema id: {schema_id}")
         schema_url = config.kafka_schema_url
+        su = os.environ["SCHEMA_URL"]
+        log.debug(f"schema url: {schema_url} ENV SCHEMA_URL: {su}")
         with httpx.Client(timeout=10.0) as client:
             r = client.get(f"{schema_url}/schemas/ids/{schema_id}")
             r.raise_for_status()
             schema_json = r.json()["schema"]  # string
             schema_dict = json.loads(schema_json)  # dict
-            SCHEMA = parse_schema(schema_dict)
-    return SCHEMA
+            ps = parse_schema(schema_dict)
+            SCHEMA[schema_id] = ps
+    return SCHEMA[schema_id]
 
 
 def unpack_value(value: Any, schema: dict) -> dict:
@@ -144,15 +166,18 @@ async def process_message(msg: ConsumerRecord) -> None:
     if record["salIndex"] != config.salIndex:
         log.info(f"Skipping message - salIndex not {config.salIndex}")
         return
-    log.debug(record)
-    plan = convert_predicted_kafka(record)
-    log.info(
-        f"Got {record['numberOfTargets']} numberOfTargets "
-        f"converted to {len(plan)} Obsplans"
-    )
-    db: DbHelp = await DbHelpProvider.getHelper()
-    await db.remove_flag(plan)
-    await db.insert_obsplan(plan)
+    if "nextVisit" in msg.key["topic"]:
+        log.debug(record)
+        plan = convert_nextVisit(record)
+    else:
+        plan = convert_predicted_kafka(record)
+        log.info(
+            f"Got {record['numberOfTargets']} numberOfTargets "
+            f"converted to {len(plan)} Obsplans"
+        )
+        db: DbHelp = await DbHelpProvider.getHelper()
+        await db.remove_flag(plan)
+        await db.insert_obsplan(plan)
 
 
 def get_consumer() -> aiokafka.AIOKafkaConsumer:

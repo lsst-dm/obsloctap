@@ -34,6 +34,9 @@ async def dump_msg() -> None:
 
         msg_dict = unpack_value(value, schema)
         if msg_dict["salIndex"] == 1:
+            # next visit schema_id = 317
+            if "nextVisit" in msg.key["topic"]:
+                msg_fn = "nextVisit_mt.pkl"
             with open(f"schema{schema_id}.pkl", "wb") as f:
                 pickle.dump(schema, f)
             with open(msg_fn, "wb") as f:

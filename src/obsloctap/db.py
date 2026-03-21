@@ -66,6 +66,7 @@ OBSPLAN_FIELDS = [
 # log: BoundLogger = (Depends(logger_dependency),)
 log = structlog.getLogger(__name__)
 min30 = TimeDelta("30min")
+min20 = TimeDelta("20min")
 
 
 class DbHelp:
@@ -167,16 +168,57 @@ class DbHelp:
 
     async def insert_obsplan(self, observations: list[Obsplan]) -> int:
         """Insert observations into the DB -
-        return the count of inserted rows."""
+        return the count of inserted rows.
+        This version avoids creating duplicate entries by checking for an
+        existing row with the same obs_id or the same t_planning before
+        inserting.
+        """
         session = AsyncSession(self.engine)
+        inserted = 0
         for observation in observations:
+            # check for existing entry with same obs_id or same t_planning
+            check_stmt = (
+                f'select 1 from {self.schema}"{Obsplan.__tablename__}" '
+                f"where obs_id = '{observation.obs_id}' "
+                f"or t_planning = {observation.t_planning} limit 1"
+            )
+            result = await session.execute(text(check_stmt))
+            exists = result.fetchone()
+            if exists:
+                log.debug(
+                    f"Skipping insert for obs_id={observation.obs_id} "
+                    f"(already present)"
+                )
+                continue
             await self.insert_obs(session, observation)
-        await session.commit()
+            inserted += 1
+        if inserted > 0:
+            await session.commit()
         await session.close()
-        log.info(
-            f"Inserted and commited {len(observations or [])} Observations."
+        log.info(f"Inserted and commited {inserted} Observations.")
+        return inserted
+
+    async def find_entries(
+        self,
+        ra: float,
+        dec: float,
+        obs_start_mjd: float,
+        session: AsyncSession,
+        tol: float = 3.0,
+        timetol: TimeDelta = min20,
+    ) -> Sequence[Row[tuple[Any]]]:
+        """Look for matching plan entires based on position and rough time"""
+
+        stmt = (
+            f'SELECT * FROM {self.schema}"{Obsplan.__tablename__}" '
+            f"WHERE ABS(s_ra - {ra}) < {tol} "
+            f"AND ABS(s_dec - {dec}) < {tol} "
+            f"AND t_min <= {obs_start_mjd + timetol} AND "
+            f"t_max >= {obs_start_mjd - timetol}"
         )
-        return len(observations or [])
+        result = await session.execute(text(stmt))
+        matches = result.fetchall()
+        return matches
 
     async def update_entries(
         self, exposures: list[Exposure], tol: float = 1
@@ -193,16 +235,10 @@ class DbHelp:
         unmatched = 0
         for exp in exposures:
             # Find matching obsplan entries
-            stmt = (
-                f'SELECT * FROM {self.schema}"{Obsplan.__tablename__}" '
-                f"WHERE ABS(s_ra - {exp.s_ra}) < {tol} "
-                f"AND ABS(s_dec - {exp.s_dec}) < {tol} "
-                f"AND t_min <= {exp.obs_start_mjd} AND "
-                f"t_max >= {exp.obs_start_mjd}"
-            )
-            result = await session.execute(text(stmt))
-            matches = result.fetchall()
             done = False
+            matches = await self.find_entries(
+                exp.s_ra, exp.s_dec, exp.obs_start_mjd, session, tol
+            )
             if len(matches) > 0:
                 match = matches[0]
                 # update execution_status to 'Performed'
@@ -222,6 +258,7 @@ class DbHelp:
                 await self.insert_exposure(exp, session)
 
         await session.commit()
+        await session.close()
         log.info(
             f"Updated {updated}, unmatched {unmatched} of {len(exposures)}"
         )
@@ -279,6 +316,92 @@ class DbHelp:
         )
         await session.execute(text(insert_stmt))
 
+    async def update_planif(self, a: Obsplan, b: Obsplan) -> Obsplan:
+        """
+        if a has some values update them in B.
+        typically for nextVisit
+        Parameters
+        ----------
+        a
+        b
+
+        Returns
+        -------
+        b updated with values from A.
+        """
+
+        fields = [
+            "t_planning",  # DOUBLE PRECISION NOT NULL,
+            "target_name",  # VARCHAR,
+            "obs_id",  # VARCHAR NOT NULL,
+            "obs_collection",  # VARCHAR,
+            "s_ra",  # DOUBLE PRECISION,
+            "s_dec",  # DOUBLE PRECISION,
+            "t_min",  # DOUBLE PRECISION NOT NULL,
+            "t_max",  # DOUBLE PRECISION NOT NULL,
+            "em_min",  # DOUBLE PRECISION,
+            "em_max",  # DOUBLE PRECISION,
+            "priority",  # INTEGER NOT NULL,
+            "rubin_rot_sky_pos",  # FLOAT,
+            "rubin_nexp",  # INTEGER
+        ]
+        noval = [0, "", "", "", 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+        for c, key in enumerate(fields):
+            new = getattr(a, key)
+            if new != noval[c]:
+                setattr(b, key, new)
+        return b
+
+    async def update_insert_nextVisit(self, obs: Obsplan) -> int:
+        """
+        For given observation find it an dupdate it or insert it and
+        mark one around same time as Aborted.
+        Parameters
+        ----------
+        obs
+
+        Returns
+        -------
+        0 for update and 1 for insert
+        """
+
+        session = AsyncSession(self.engine)
+        matches = await self.find_entries(
+            obs.s_ra, obs.s_dec, obs.obs_start_mjd, session, 1.0
+        )
+        log.debug(f"update_insert_nextVisit: got  {len(matches)} matches")
+        retval = 0
+        if len(matches) > 0:
+            plan = self.process(matches)[0]
+            await self.update_planif(plan, obs)
+            await self.update_obsplan(plan, session)
+        else:
+            await self.insert_obs(obs, session)
+            retval = 1
+        await session.commit()
+        await session.close()
+        return retval
+
+    async def update_obsplan(
+        self, exp: Obsplan, session: AsyncSession
+    ) -> None:
+        """update an obsplan line used for nextVisit"""
+        update_stmt = (
+            f'UPDATE {self.schema}"{Obsplan.__tablename__}" '
+            f"SET "
+            f"target_name = '{exp.target_name}', "
+            f"obs_collection = '{exp.science_program}| {exp.scheduler_note}', "
+            f"em_min = '{spectral_ranges[exp.band][0]}', "
+            f"em_max = '{spectral_ranges[exp.band][1]}', "
+            f"t_min = {exp.obs_start_mjd}, "
+            f"t_max = {exp.obs_end_mjd}, "
+            f"t_priority = {exp.priority}, "
+            f"rubin_rot_sky_pos = {exp.sky_rotation} "
+            f"WHERE obs_id = '{exp.obs_id}'"
+        )
+        await session.execute(text(update_stmt))
+
     async def update_one(
         self, exp: Exposure, match: Row, session: AsyncSession
     ) -> None:
@@ -302,16 +425,19 @@ class DbHelp:
         self, observations: list[Obsplan], priority: int = 2
     ) -> int:
         """Look at the obsplan table wrt to the new schedule,
-        if there is a new simlar entry remove the existing one,
-        if there is a time with a different entry mark it as not observed.
-        Perhaps one could also delete the not observed ones.
-        Observations should be sorted on t_planning.
+        If there is an existing observation that falls within the time
+        window of a new scheduled observation and it has a different
+        obs_id, delete the old one (it will be replaced by the new).
+        Any old observations within the overall window that are not
+        matched to a new observation will be marked as Not Observed.
+
+        Observations should be sorted on t_planning (descending).
 
         Returns number of entries marked not executed"""
 
         if len(observations) == 0:
             return 0
-        # oservations are sorted
+        # Observations are expected to be sorted descending
         mint = observations[-1].t_planning
         maxt = observations[0].t_planning
 
@@ -326,34 +452,32 @@ class DbHelp:
         result = await session.execute(text(statement))
         oldobs: list[Obsplan] = self.process(result.all())
         await session.close()
-        todelete: list = []
-        tomark: list = []
-        obscount = 0
-        # loop over the old observations and match to new ones
-        # both lists in descending order
-        for obs in oldobs:
-            notfound: bool = True
-            while notfound and obscount < len(observations):
-                newobs: Obsplan = observations[obscount]
-                if newobs.t_min < obs.t_planning < newobs.t_max:
-                    # same time frame - and this is schedule
-                    # so we delete the old and put in the new
-                    #
-                    if obs.obs_id == newobs.obs_id:
-                        # its a match so we replace it
-                        todelete.append(obs.t_planning)
-                        obscount += 1
-                        notfound = False
-                if obs.t_planning < newobs.t_min:
-                    # need to look at the next one this is not a match
-                    obscount += 1
+
+        # Build a set of old t_planning values that get deleted/replaced
+        todelete: list[float] = []
+        tomark: list[float] = []
+
+        # For faster matching, create index by t_planning for new observations
+        new_by_window = []
+        for newobs in observations:
+            new_by_window.append((newobs.t_min, newobs.t_max, newobs.obs_id))
+
+        # For each old observation, see if it falls within any new obs window
+        for old in oldobs:
+            matched = False
+            for tmin, tmax, new_id in new_by_window:
+                if tmin <= old.t_planning <= tmax:
+                    matched = True
+                    # if the ids differ, the old should be deleted (replaced)
+                    if old.obs_id != new_id:
+                        todelete.append(old.t_planning)
+                    # if ids are same, keep the old (it matches)
                     break
-                # anything else is mark it not observed
-                # the lists are sorted so if the currect observation is alread
-                # newer than this one its newer than te rest
-                if notfound or obs.t_planning > newobs.t_max:
-                    tomark.append(obs.t_planning)
-                notfound = False
+            if not matched:
+                # not matched to any new window -> mark as Not Observed
+                tomark.append(old.t_planning)
+
+        # apply deletes and marks
         await self.delete_obs(todelete)
         await self.mark_obs(tomark)
         return len(tomark or [])

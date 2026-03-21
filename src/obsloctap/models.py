@@ -82,7 +82,7 @@ class Obsplan(BaseModel):
     instrument_name: str = "LSSTCam"  # dataId[’instrument’]
     t_plan_exptime: float = 30.0  # logevent_predictedSchedule.mjd
     category: str = "Fixed"
-    priority: int = 1  # 1
+    priority: int = 2  # 1
     execution_status: str = "Scheduled"
     # Scheduled, Unscheduled, Performed, Aborted
     tracking_type: str = "Sidereal"

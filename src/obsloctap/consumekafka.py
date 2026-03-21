@@ -14,7 +14,6 @@
 import io
 import json
 import math
-import pickle
 import struct
 from typing import Any
 
@@ -22,12 +21,13 @@ import aiokafka
 import httpx
 import structlog
 from aiokafka import ConsumerRecord
+from astropy.time import Time
 from fastavro import parse_schema, schemaless_reader
 from pandas import DataFrame
 
 from obsloctap.config import config
 from obsloctap.db import DbHelp, DbHelpProvider
-from obsloctap.models import Obsplan
+from obsloctap.models import Obsplan, spectral_ranges
 
 # Configure logging
 log = structlog.getLogger(__name__)
@@ -40,7 +40,6 @@ topic = [
 ]
 
 SCHEMA: dict = {}
-
 COLS = [  # as in the schedule message Kafka or EFD
     "mjd",
     "ra",
@@ -111,21 +110,24 @@ def convert_predicted_kafka(msg: dict) -> list[Obsplan]:
     return plan
 
 
-def convert_nextVisit(msg: dict) -> list[Obsplan]:
-    obs = []
-    schema_id = 317
-    schema = get_schema(schema_id)
-    js = json.dumps(schema)
-    log.info(f"SCHEMA {schema_id}\n{js}")
-    with open(f"schema{schema_id}.pkl", "wb") as f:
-        pickle.dump(schema, f)
-    msg_fn = "nextVisit_mt.pkl"
-    with open(msg_fn, "wb") as f:
-        print(f"Dumping message {msg_fn}")
-        pickle.dump(msg, f)
+def convert_nextVisit(msg: dict) -> Obsplan:
     plan = Obsplan()
-    obs = [plan]
-    return obs
+    plan.s_ra = msg["position"][0]
+    plan.s_dec = msg["position"][1]
+    plan.rubin_nexp = msg["nimages"]
+    plan.t_planning = (
+        Time.now().to_value("mjd")
+        if msg["startTime"] == 0
+        else msg["startTime"]
+    )
+    plan.rubin_rot_sky_pos = msg["cameraAngle"]
+    plan.target_name = msg["survey"]
+    if msg["filters"]:
+        spectral_range = spectral_ranges[msg["filters"]]
+        plan.em_min = spectral_range[0]
+        plan.em_max = spectral_range[1]
+    plan.priority = 0  # 99% going to happen
+    return plan
 
 
 def get_schema(schema_id: int = 2191) -> dict:
@@ -164,16 +166,19 @@ async def process_message(msg: ConsumerRecord) -> None:
     if record["salIndex"] != config.salIndex:
         log.info(f"Skipping message - salIndex not {config.salIndex}")
         return
+    db: DbHelp = await DbHelpProvider.getHelper()
     if "nextVisit" in msg.topic:
         log.debug(record)
-        plan = convert_nextVisit(record)
+        obs = convert_nextVisit(record)
+        # nextVisit is published for all sorts not just on sky ..
+        if obs.s_ra != 0 and obs.s_dec != 0:
+            await db.update_insert_nextVisit(obs)
     else:
         plan = convert_predicted_kafka(record)
         log.info(
             f"Got {record['numberOfTargets']} numberOfTargets "
             f"converted to {len(plan)} Obsplans"
         )
-        db: DbHelp = await DbHelpProvider.getHelper()
         await db.remove_flag(plan)
         await db.insert_obsplan(plan)
 

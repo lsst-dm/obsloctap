@@ -210,3 +210,20 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         exp.band = "none"  # test this
         await dbhelp.insert_exposure(exp, dbhelp.get_session())
         plans2 = len(await dbhelp.get_schedule(time=0))
+
+    @pytest.mark.asyncio
+    async def test_updateif(self) -> None:
+        a = Obsplan()
+        b = Obsplan()
+
+        a.t_planning = 505.4
+        a.target_name = " Test Targ"
+
+        dbhelp = await TestDB.setup_db()
+
+        n = await dbhelp.update_planif(a, b)
+        self.assertEqual(n, 1, "Should have updated 1 ")
+
+        self.assertEqual(a, b, " Not the same object")
+        self.assertEqual(a.t_planning, b.t_planning)
+        self.assertEqual(a.target_name, b.target_name)

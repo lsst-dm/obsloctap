@@ -13,6 +13,7 @@ from obsloctap.db import DbHelp, DbHelpProvider
 
 __all__ = ["SqliteDbHelp"]
 
+from obsloctap.models import Obsplan
 
 EXPOSURE_DDL = """
 CREATE TABLE exposure (
@@ -56,7 +57,9 @@ class SqliteDbHelp:
             conn = db.get_session()
             ddl = schema.read().split(";")
             try:  # make sure we are empty
-                await conn.execute(text('drop table "ObsPlan";'))  # noqa: E702
+                await conn.execute(
+                    text(f"drop table {Obsplan.__tablename__}; ")  # noqa: E702
+                )
                 await conn.commit()
             except Exception as e:
                 print(e)

@@ -8,6 +8,7 @@ import pytest
 from obsloctap.config import config
 from obsloctap.consdbhelp import ConsDbHelpProvider
 from obsloctap.consumekafka import (
+    convert_nextVisit,
     convert_predicted,
     convert_predicted_kafka,
     unpack_value,
@@ -31,6 +32,22 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
         DbHelpProvider.clear()
         os.environ["consdb_url"] = ""
         ConsDbHelpProvider.consdb_helper = None
+
+    async def test_kafka_nextVisit(self) -> None:
+        schema = {}
+        with open("tests/schema317.pkl", "rb") as s:
+            schema = pickle.load(s)
+        msg = None
+        # this is a binary message dumped form kafka
+        with open("tests/nextVisit_mt.pkl", "rb") as f:
+            msg = pickle.load(f)
+        msg_dict: dict = unpack_value(msg.value, schema)
+
+        topic = msg.topic
+        self.assertTrue("next" in topic)
+
+        plan = convert_nextVisit(msg_dict)
+        self.assertIsNotNone(plan)
 
     async def test_kafka_schema(self) -> None:
         schema = {}

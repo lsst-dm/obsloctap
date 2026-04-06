@@ -102,6 +102,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
         log.exception("exposure update error in fillin")
     # this will be true always unless we pass in a number which is for test
     while stopafter != count:
+        count += 1
         try:
             # oldest scheduled job if it should have happened ..
             sched = await db.find_oldest_plan()
@@ -113,7 +114,8 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                 exposures = await cdb.get_exposures_between(prior, now)
                 if exposures:
                     lastconsdb = exposures[-1].obs_start_mjd
-                entries += await db.update_entries(exposures)
+                updated, inserted = await db.update_insert_exposures(exposures)
+                entries += updated
                 exec += 1
                 sleeptime = stime
             else:  # it is in the future
@@ -129,11 +131,10 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                     f"Updated {entries} total planning lines"
                     f"Sleeping {sleeptime}s"
                 )
-            count += 1
             # if we  have a scheduled observation could sleep until then.
             await asyncio.sleep(sleeptime)
         except Exception:
-            # back off
+            # back off - we really just want this to keep running
             sleeptime = 2 * sleeptime
             ConsDbHelpProvider.consdb_helper = (
                 None  # make it get a new connection

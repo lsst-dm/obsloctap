@@ -67,6 +67,8 @@ OBSPLAN_FIELDS = [
 log = structlog.getLogger(__name__)
 min30 = TimeDelta("30min")
 min20 = TimeDelta("20min")
+min15 = TimeDelta("15min")
+sec30 = TimeDelta("30s")
 
 
 class DbHelp:
@@ -146,9 +148,10 @@ class DbHelp:
         return self.process(obs)
 
     async def insert_obs(
-        self, session: AsyncSession, observation: Obsplan
-    ) -> None:
-        """Insert an observation into the DB"""
+        self, observation: Obsplan, session: AsyncSession
+    ) -> bool:
+        """Insert an observation into the DB.
+        Returns True if insert was successful, False otherwise."""
 
         value_str = StringIO()
         for count, key in enumerate(OBSPLAN_FIELDS):
@@ -163,24 +166,27 @@ class DbHelp:
             f'insert into {self.schema}"{Obsplan.__tablename__}" '
             f"values ({value_str.getvalue()})"
         )
-        # log.debug(stmt)
-        await session.execute(text(stmt))
+        try:
+            res = await session.execute(text(stmt))
+            return res.rowcount > 0
+        except Exception as e:
+            log.error(f"Failed to insert observation: {e}")
+            return False
 
     async def insert_obsplan(self, observations: list[Obsplan]) -> int:
         """Insert observations into the DB -
         return the count of inserted rows.
         This version avoids creating duplicate entries by checking for an
-        existing row with the same obs_id or the same t_planning before
-        inserting.
+        existing row with the same t_planning before inserting.
         """
         session = AsyncSession(self.engine)
         inserted = 0
         for observation in observations:
-            # check for existing entry with same obs_id or same t_planning
+            # check for existing entry with same t_planning
             check_stmt = (
                 f'select 1 from {self.schema}"{Obsplan.__tablename__}" '
-                f"where obs_id = '{observation.obs_id}' "
-                f"or t_planning = {observation.t_planning} limit 1"
+                f"where ABS(t_planning - {observation.t_planning}) < 1e-6 "
+                f"limit 1"
             )
             result = await session.execute(text(check_stmt))
             exists = result.fetchone()
@@ -190,13 +196,33 @@ class DbHelp:
                     f"(already present)"
                 )
                 continue
-            await self.insert_obs(session, observation)
+            await self.insert_obs(observation, session)
             inserted += 1
         if inserted > 0:
             await session.commit()
         await session.close()
         log.info(f"Inserted and commited {inserted} Observations.")
         return inserted
+
+    async def find_by_obs_id(
+        self,
+        obs_id: str,
+        session: AsyncSession | None = None,
+    ) -> Sequence[Row[tuple[Any]]]:
+        """Look for matching plan entires based on obs_id"""
+        close_session = False
+        if session is None:
+            session = AsyncSession(self.engine)
+            close_session = True
+        stmt = (
+            f'SELECT * FROM {self.schema}"{Obsplan.__tablename__}" '
+            f'WHERE obs_id == "{obs_id}"'
+        )
+        result = await session.execute(text(stmt))
+        matches = result.fetchall()
+        if close_session:
+            await session.close()
+        return matches
 
     async def find_entries(
         self,
@@ -209,73 +235,101 @@ class DbHelp:
     ) -> Sequence[Row[tuple[Any]]]:
         """Look for matching plan entires based on position and rough time"""
 
+        # Convert TimeDelta to MJD value (in days)
+        timetol_mjd = timetol.to_value("jd")
+
         stmt = (
             f'SELECT * FROM {self.schema}"{Obsplan.__tablename__}" '
             f"WHERE ABS(s_ra - {ra}) < {tol} "
             f"AND ABS(s_dec - {dec}) < {tol} "
-            f"AND t_min <= {obs_start_mjd + timetol} AND "
-            f"t_max >= {obs_start_mjd - timetol}"
+            f"AND t_min <= {obs_start_mjd + timetol_mjd} AND "
+            f"t_max >= {obs_start_mjd - timetol_mjd}"
         )
         result = await session.execute(text(stmt))
         matches = result.fetchall()
         return matches
 
-    async def update_entries(
-        self, exposures: list[Exposure], tol: float = 1
-    ) -> int:
+    async def update_insert_exposures(
+        self,
+        exposures: list[Exposure],
+        tol: float = 0.01,
+        timetol: TimeDelta = sec30,
+    ) -> tuple[int, int]:
         """
         Update obsplan entries that match exposures by s_ra, s_dec,
         and obs_start_mjd in [t_min, t_max].
         tol: tolerances for matching s_ra and s_dec.
         Check it is not 'performed' if it is onlyupdate if same id.
-        Returns the number of updated entries.
+        Returns the number of updated and inserted entries in a tupple.
         """
         session = AsyncSession(self.engine)
         updated = 0
         unmatched = 0
+        inserted = 0
         for exp in exposures:
             # Find matching obsplan entries
             done = False
-            matches = await self.find_entries(
-                exp.s_ra, exp.s_dec, exp.obs_start_mjd, session, tol
-            )
-            if len(matches) > 0:
-                match = matches[0]
-                # update execution_status to 'Performed'
-                # unless it is Performed .. then we better chekc id
-                # this will mean we can update to get new info from consdb
-                # but not clobber it if the id is different.
-                if match.execution_status != "Performed" or (
-                    match.execution_status == "Performed"
-                    and match.obs_id == str(exp.exposure_id)
-                ):
-                    await self.update_one(exp, match, session)
+            # simple case obs_id matches exposure_id
+            idmatch = await self.find_by_obs_id(exp.exposure_id, session)
+            if len(idmatch) > 0:
+                # update execution_status to 'Performed' etc
+                if await self.update_one(exp, idmatch[0], session):
                     updated += 1
                     done = True
+                else:
+                    log.error(
+                        f"Failed to update exp: {exp.exposure_id} - "
+                        f"obs: {idmatch[0].obs_id} "
+                    )
+
+            if not done:
+                matches = await self.find_entries(
+                    exp.s_ra,
+                    exp.s_dec,
+                    exp.obs_start_mjd,
+                    session,
+                    tol,
+                    timetol,
+                )
+                for match in matches:
+                    if match.execution_status != "Performed":
+                        # Found a match that is not yet performed
+                        if await self.update_one(exp, match, session):
+                            updated += 1
+                            done = True
+                        else:
+                            log.error(
+                                f"Failed to update exp: {exp.exposure_id} - "
+                                f"obs: {match.obs_id} "
+                            )
+                        break
 
             if not done:
                 unmatched += 1
-                await self.insert_exposure(exp, session)
+                if await self.insert_exposure(exp, session):
+                    inserted += 1
 
         await session.commit()
         await session.close()
         log.info(
-            f"Updated {updated}, unmatched {unmatched} of {len(exposures)}"
+            f"Updated {updated}, unmatched {unmatched}, "
+            f"inserted {inserted} of {len(exposures)}"
         )
-        return updated
+        return (updated, inserted)
 
     async def insert_exposure(
         self, exp: Exposure, session: AsyncSession
-    ) -> None:
+    ) -> bool:
+        """Put in an obsplan line based on an exposure.
+        This is when consdb has an observation but it does not match
+        any planned item.
+        Returns True if insert was successful, False otherwise."""
         if not exp.band or exp.band not in spectral_ranges:
             log.warning(
                 f"{exp.exposure_id} has no band - "
                 f"will insert 'other:pinhole'"  # noqa: E231 em_max
             )
             exp.band = "other:pinhole"
-        """put in  an obsplan line based on an exposure
-        this is when consdb has an observation but it does not match
-        any planned item"""
         value_str = (
             f"0, "  # t_planning
             f"'{exp.target_name}', "  # target_name
@@ -314,7 +368,12 @@ class DbHelp:
             f'insert into {self.schema}"{Obsplan.__tablename__}" '
             f"values ({value_str}) "
         )
-        await session.execute(text(insert_stmt))
+        try:
+            res = await session.execute(text(insert_stmt))
+            return res.rowcount > 0
+        except Exception as e:
+            log.error(f"Failed to insert exposure {exp.exposure_id}: {e}")
+            return False
 
     async def update_planif(self, a: Obsplan, b: Obsplan) -> Obsplan:
         """
@@ -355,7 +414,7 @@ class DbHelp:
 
     async def update_insert_nextVisit(self, obs: Obsplan) -> int:
         """
-        For given observation find it an dupdate it or insert it and
+        For given observation find it and update it or insert it and
         mark one around same time as Aborted.
         Parameters
         ----------
@@ -367,45 +426,52 @@ class DbHelp:
         """
 
         session = AsyncSession(self.engine)
+        # next visit can be any time but 20min seems plenty (PP use 15min)
         matches = await self.find_entries(
-            obs.s_ra, obs.s_dec, obs.obs_start_mjd, session, 1.0
+            obs.s_ra, obs.s_dec, obs.t_planning, session, 1.0, min20
         )
         log.debug(f"update_insert_nextVisit: got  {len(matches)} matches")
         retval = 0
         if len(matches) > 0:
             plan = self.process(matches)[0]
+            t_planning = plan.t_planning
             await self.update_planif(plan, obs)
+            #  we keep t_planning from the exisiting enty -
+            #  nextVisit has no time.
+            plan.t_planning = t_planning
             await self.update_obsplan(plan, session)
         else:
-            await self.insert_obs(obs, session)
-            retval = 1
+            if await self.insert_obs(obs, session):
+                retval = 1
         await session.commit()
         await session.close()
         return retval
 
     async def update_obsplan(
-        self, exp: Obsplan, session: AsyncSession
+        self, obs: Obsplan, session: AsyncSession
     ) -> None:
         """update an obsplan line used for nextVisit"""
         update_stmt = (
             f'UPDATE {self.schema}"{Obsplan.__tablename__}" '
             f"SET "
-            f"target_name = '{exp.target_name}', "
-            f"obs_collection = '{exp.science_program}| {exp.scheduler_note}', "
-            f"em_min = '{spectral_ranges[exp.band][0]}', "
-            f"em_max = '{spectral_ranges[exp.band][1]}', "
-            f"t_min = {exp.obs_start_mjd}, "
-            f"t_max = {exp.obs_end_mjd}, "
-            f"t_priority = {exp.priority}, "
-            f"rubin_rot_sky_pos = {exp.sky_rotation} "
-            f"WHERE obs_id = '{exp.obs_id}'"
+            f"target_name = '{obs.target_name}', "
+            f"obs_collection = '{obs.obs_collection}', "
+            f"em_min = {obs.em_min}, "
+            f"em_max = {obs.em_max}, "
+            f"t_min = {obs.t_min}, "
+            f"t_max = {obs.t_max}, "
+            f"priority = {obs.priority}, "
+            f"rubin_rot_sky_pos = {obs.rubin_rot_sky_pos} "
+            f"WHERE obs_id = '{obs.obs_id}'"
         )
         await session.execute(text(update_stmt))
 
     async def update_one(
         self, exp: Exposure, match: Row, session: AsyncSession
-    ) -> None:
-        """update an obsplan line based on an exposure"""
+    ) -> bool:
+        """update an obsplan line based on an exposure
+         setting it to performed
+        this was using obsid - but is that in obsplan?."""
         update_stmt = (
             f'UPDATE {self.schema}"{Obsplan.__tablename__}" '
             f"SET execution_status = 'Performed', "
@@ -419,7 +485,8 @@ class DbHelp:
             f"rubin_rot_sky_pos = {exp.sky_rotation} "
             f"WHERE obs_id = '{match.obs_id}'"
         )
-        await session.execute(text(update_stmt))
+        res = await session.execute(text(update_stmt))
+        return res.rowcount > 0
 
     async def remove_flag(
         self, observations: list[Obsplan], priority: int = 2
@@ -479,7 +546,7 @@ class DbHelp:
 
         # apply deletes and marks
         await self.delete_obs(todelete)
-        await self.mark_obs(tomark)
+        await self.mark_not_observed(tomark)
         return len(tomark or [])
 
     async def find_oldest_plan(
@@ -532,10 +599,11 @@ class DbHelp:
         await session.commit()
         await session.close()
 
-    async def mark_obs(self, ts: list[float]) -> None:
-        """Not observed"""
+    async def mark_not_observed(self, ts: list[float]) -> int:
+        """Mark observations as Not Observed.
+        Returns number of rows updated."""
         if not ts or len(ts) == 0:
-            return
+            return 0
         session = AsyncSession(self.engine)
         stmt = (
             f'update {self.schema}"{Obsplan.__tablename__}"'
@@ -543,9 +611,10 @@ class DbHelp:
             f" where t_planning in ({','.join(str(t) for t in ts)})"
         )
         log.debug(f"mark_obs: {stmt}")
-        await session.execute(text(stmt))
+        res = await session.execute(text(stmt))
         await session.commit()
         await session.close()
+        return res.rowcount
 
     async def delete_obs(self, ts: list[float]) -> None:
         if not ts or len(ts) == 0:

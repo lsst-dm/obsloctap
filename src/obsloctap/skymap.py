@@ -1676,10 +1676,6 @@ class ScheduleSkyMap:
         return cls._ecl_in_gal_segs
 
 
-#  Backward-compatible module-level wrappers
-# These keep ``handlers/external.py`` and ``tests/test_skymap.py`` unchanged.
-
-
 def make_sky_html(
     schedule: list[Obsplan],
     start_val: str = "now",

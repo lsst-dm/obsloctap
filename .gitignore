@@ -51,6 +51,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+uv.lock
 
 # Translations
 *.mo
@@ -112,6 +113,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.idea
 
 # Spyder project settings
 .spyderproject
@@ -136,3 +138,6 @@ dmypy.json
 
 # macOS
 .DS_Store
+
+# Test artifacts
+tests/output/

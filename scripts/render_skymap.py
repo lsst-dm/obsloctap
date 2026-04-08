@@ -145,10 +145,10 @@ def main() -> None:
 
     print(f" -- Wrote {path}")
     if _should_open_browser(args.no_open):
-        webbrowser.open(f"file://{path}")  # noqa: E231
+        webbrowser.open(f"file://{path}")
         print(" -- Opened in browser")
     else:
-        print(f"  → Open manually: file://{path}")  # noqa: E231
+        print(f"  → Open manually: file://{path}")
 
 
 if __name__ == "__main__":

@@ -3,5 +3,15 @@ max-line-length = 79
 # E203: whitespace before :, flake8 disagrees with PEP-8
 # W503: line break after binary operator, flake8 disagrees with PEP-8
 ignore = E203, W503
+per-file-ignores =
+    # E231, E225, E702: flake8 misreads operators/punctuation inside f-string literals
+    src/obsloctap/skymap.py: E231, E225, E702
+    # E231: flake8 misreads :// inside f-string URL literals
+    scripts/render_skymap.py: E231
+    # E231, E702: flake8 misreads punctuation inside f-string literals
+    src/obsloctap/db.py: E231, E702
+    src/obsloctap/consdbhelp.py: E231
+    # E231, E702: flake8 misreads punctuation inside f-string literals
+    tests/DBmock.py: E231, E702
 exclude =
     docs/conf.py

@@ -33,4 +33,5 @@ obsloctap:
 	docker  build  . -f Dockerfile.obsloctap -t obsloctap
 
 runlocal:
+	@echo "Viewer: http://127.0.0.1:8000/obsloctap/static/viewer.html"
 	uvicorn obsloctap.main:app

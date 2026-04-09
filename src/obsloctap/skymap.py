@@ -43,6 +43,7 @@ from bokeh.models import (
 )
 from bokeh.plotting import figure
 from bokeh.resources import CDN
+from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -1135,7 +1136,7 @@ class ScheduleSkyMap:
         )
         return extra, r_ecl_in_gal
 
-    def _add_pdf_equatorial_grid(self, ax: object) -> None:
+    def _add_pdf_equatorial_grid(self, ax: Axes) -> None:
         """Add RA/Dec grid lines and labels to the PDF plot."""
         decs = np.linspace(-89.9, 89.9, 300)
         for ra_line in range(0, 360, 30):
@@ -1187,7 +1188,7 @@ class ScheduleSkyMap:
             rotation=90,
         )
 
-    def _add_pdf_galactic_grid(self, ax: object) -> None:
+    def _add_pdf_galactic_grid(self, ax: Axes) -> None:
         """Add Galactic longitude/latitude grid lines and labels to PDF."""
         lat_vals = np.linspace(-89.9, 89.9, 300)
         for lon_line in range(0, 360, 30):
@@ -1243,7 +1244,7 @@ class ScheduleSkyMap:
             rotation=90,
         )
 
-    def _add_pdf_plane_lines(self, ax: object, *, coordinates: str) -> None:
+    def _add_pdf_plane_lines(self, ax: Axes, *, coordinates: str) -> None:
         """Add optional plane overlays to the PDF plot
         for the chosen coordinates."""
         if coordinates == "equatorial":

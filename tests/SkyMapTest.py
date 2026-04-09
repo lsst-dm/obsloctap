@@ -8,11 +8,15 @@ and no network calls are made.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import pathlib
 import sys
 import unittest
 from typing import Any
+
+import pandas as pd
 
 from obsloctap.models import Obsplan
 from obsloctap.skymap import (
@@ -40,7 +44,7 @@ class TestSkyMap(unittest.TestCase):
         raw: list[dict[str, Any]] = json.loads(_FIXTURE.read_text())
         cls.schedule = [Obsplan(**obs) for obs in raw]
 
-    # -- lookahead window permutations --------------------------------------
+    # -- lookahead window permutations
 
     def test_skymap_12h(self) -> None:
         html = make_sky_html(
@@ -63,7 +67,7 @@ class TestSkyMap(unittest.TestCase):
         self.assertIsInstance(html, str)
         self.assertGreater(len(html), 0)
 
-    # -- start-time permutations --------------------------------------------
+    # -- start-time permutations
 
     def test_skymap_start_iso(self) -> None:
         html = make_sky_html(
@@ -75,7 +79,7 @@ class TestSkyMap(unittest.TestCase):
         self.assertIsInstance(html, str)
         self.assertGreater(len(html), 0)
 
-    # -- edge cases ---------------------------------------------------------
+    # -- edge cases
 
     def test_skymap_empty_schedule(self) -> None:
         html = make_sky_html([], start_val="now", time_val=48, path_prefix="")
@@ -89,7 +93,7 @@ class TestSkyMap(unittest.TestCase):
         self.assertIsInstance(html, str)
         self.assertIn(prefix, html)
 
-    # Data export
+    # Data export tests
 
     def test_skymap_pdf(self) -> None:
         pdf = make_sky_pdf(self.schedule, start_val="now", time_val=48)
@@ -102,20 +106,15 @@ class TestSkyMap(unittest.TestCase):
         self.assertTrue(out.exists())
 
     def test_schedule_json(self) -> None:
-        import json as _json
-
         data = make_schedule_json(self.schedule)
         self.assertIsInstance(data, str)
-        parsed = _json.loads(data)
+        parsed = json.loads(data)
         self.assertEqual(len(parsed), len(self.schedule))
         out_dir = pathlib.Path(__file__).parent / "output"
         out_dir.mkdir(exist_ok=True)
         (out_dir / "schedule.json").write_text(data)
 
     def test_schedule_csv(self) -> None:
-        import csv
-        import io
-
         data = make_schedule_csv(self.schedule)
         self.assertIsInstance(data, str)
         rows = list(csv.DictReader(io.StringIO(data)))
@@ -125,10 +124,6 @@ class TestSkyMap(unittest.TestCase):
         (out_dir / "schedule.csv").write_text(data)
 
     def test_schedule_parquet(self) -> None:
-        import io
-
-        import pandas as pd
-
         data = make_schedule_parquet(self.schedule)
         self.assertIsInstance(data, bytes)
         df = pd.read_parquet(io.BytesIO(data))

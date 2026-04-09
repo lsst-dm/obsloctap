@@ -655,6 +655,8 @@ class MockDbHelp(DbHelp):
         obs.s_dec = -74.60384434722222
         obs.rubin_rot_sky_pos = 18.33895879413964
         obs.rubin_nexp = 3
+        obs.em_min = spectral_ranges["r"][0]
+        obs.em_max = spectral_ranges["r"][1]
         observations.append(obs)
         return observations
 

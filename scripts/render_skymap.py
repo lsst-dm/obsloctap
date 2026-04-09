@@ -21,6 +21,8 @@ import tempfile
 import webbrowser
 from typing import Any
 
+import requests
+
 from obsloctap.models import Obsplan
 from obsloctap.skymap import make_sky_html
 
@@ -39,8 +41,6 @@ def _should_open_browser(no_open: bool) -> bool:
 
 
 def _fetch_live_data(start: str, time: int) -> list[dict[str, Any]] | None:
-    import requests
-
     params: dict[str, Any] = {"time": time}
     if start.lower() != "now":
         params["start"] = start

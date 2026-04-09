@@ -207,15 +207,15 @@ class ConsDbHelpProvider:
             config = Configuration()
             driver = "postgresql+asyncpg"
             full_url = (
-                f"{driver}://{config.consdb_username}:"  # noqa: E231
+                f"{driver}://{config.consdb_username}:"
                 f"{config.consdb_password}@"
                 f"{config.consdb_url}/{config.consdb_database}"
             )
             if "memory" in config.consdb_url:
                 driver = "sqlite+aiosqlite"
                 full_url = (  # just using one db for sqllite
-                    f"{driver}:///file:obloctabdb"  # noqa: E231
-                    "?mode=memory&cache=shared&uri=true"  # noqa: E231
+                    f"{driver}:///file:obloctabdb"
+                    "?mode=memory&cache=shared&uri=true"
                 )
                 log.info(
                     f"Creating SQlAlchemy engine For CONSDB with "

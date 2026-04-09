@@ -16,6 +16,7 @@ import logging
 from astropy.time import Time, TimeDelta
 from fastapi import APIRouter, Depends
 from fastapi.params import Query
+from fastapi.responses import HTMLResponse
 from safir.dependencies.logger import logger_dependency
 from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
@@ -23,6 +24,7 @@ from structlog.stdlib import BoundLogger
 from ..config import config
 from ..db import DbHelpProvider
 from ..models import Index, Obsplan
+from ..skymap import make_sky_html
 
 __all__ = ["get_index", "external_router"]
 
@@ -101,3 +103,43 @@ async def get_schedule(
     else:
         schedule = await dbhelp.get_schedule(time)
     return schedule
+
+
+@external_router.get(
+    "/skymap",
+    description="Interactive all-sky map of the observing schedule.",
+    response_class=HTMLResponse,
+    summary="Sky Map",
+    include_in_schema=False,
+)
+async def get_skymap(
+    start: str = Query("now", description="Start time ('now' or ISO/MJD)"),
+    time: int = Query(24, description="Hours of schedule lookahead"),
+    logger: BoundLogger = Depends(logger_dependency),
+) -> HTMLResponse:
+    logger.info(f"Skymap requested for time: {time}, start {start}")
+    dbhelp = await DbHelpProvider.getHelper()
+    if start and start.lower() != "now":
+        t = Time.now() - TimeDelta("1440min")
+        success = False
+        try:
+            t = Time(start, format="iso", scale="utc")
+            success = True
+        except Exception:
+            pass
+        try:
+            t = Time(float(start), format="mjd")
+            success = True
+        except Exception:
+            pass
+        logger.info(f"Converted time: {success} - Using start time: {t}")
+        schedule = await dbhelp.get_schedule(time, start=t)
+    else:
+        schedule = await dbhelp.get_schedule(time)
+    html = make_sky_html(
+        schedule,
+        start_val=start,
+        time_val=time,
+        path_prefix=config.path_prefix,
+    )
+    return HTMLResponse(content=html)

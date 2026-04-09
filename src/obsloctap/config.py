@@ -167,6 +167,12 @@ class Configuration(BaseSettings):
         validation_alias="salIndex",
     )
 
+    service_url: str = Field(
+        "https://usdf-rsp.slac.stanford.edu/obsloctap",
+        title="Base URL of the deployed obsloctap service",
+        validation_alias="service_url",
+    )
+
 
 config = Configuration()
 """Configuration for obsloctap."""

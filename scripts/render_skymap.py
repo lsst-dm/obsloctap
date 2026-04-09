@@ -23,14 +23,15 @@ from typing import Any
 
 import requests
 
+from obsloctap.config import config
 from obsloctap.models import Obsplan
 from obsloctap.skymap import make_sky_html
 
 _REPO_ROOT = pathlib.Path(__file__).parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
-LIVE_URL = "https://usdf-rsp.slac.stanford.edu/obsloctap/schedule"
-LIVE_PREFIX = "https://usdf-rsp.slac.stanford.edu/obsloctap"
+LIVE_URL = f"{config.service_url}/schedule"
+LIVE_PREFIX = config.service_url
 _FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "schedule_48h.json"
 
 

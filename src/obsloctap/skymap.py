@@ -1053,7 +1053,7 @@ class ScheduleSkyMap:
             lx, ly = _hammer_aitoff(1.0, float(dec_line))
             dec_lbl_x.append(float(lx))
             dec_lbl_y.append(float(ly))
-            dec_lbl_t.append(f"{dec_line: +.0f}°")
+            dec_lbl_t.append(f"{float(dec_line):+.0f}°")
         p.multi_line(dec_xs, dec_ys, line_color="#252545", line_width=0.7)
         p.text(
             x=dec_lbl_x,

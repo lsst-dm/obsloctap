@@ -327,7 +327,7 @@ class DbHelp:
         if not exp.band or exp.band not in spectral_ranges:
             log.warning(
                 f"{exp.exposure_id} has no band - "
-                f"will insert 'other:pinhole'"  # noqa: E231 em_max
+                f"will insert 'other:pinhole'"
             )
             exp.band = "other:pinhole"
         value_str = (
@@ -346,9 +346,9 @@ class DbHelp:
             f"{exp.obs_end_mjd - exp.obs_start_mjd}, "  # t_exptime
             f"15, "  # t_resolution
             f"'{spectral_ranges[
-                exp.band or 'other:pinhole'][0]}', "  # noqa: E231 em_min
+                exp.band or 'other:pinhole'][0]}', "
             f"'{spectral_ranges[
-                exp.band or 'other:pinhole'][1]}', "  # noqa: E231 em_max
+                exp.band or 'other:pinhole'][1]}', "
             f"0, "  # em_res_power
             f"'phot.flux.density', "  # o_ucd
             f"'', "  # pol_states
@@ -689,15 +689,15 @@ class DbHelpProvider:
                 config = Configuration()
                 driver = "postgresql+asyncpg"
                 full_url = (
-                    f"{driver}://{config.database_user}:"  # noqa: E231
+                    f"{driver}://{config.database_user}:"
                     f"{config.database_password}@"
                     f"{config.database_url}/{config.database}"
                 )
                 if "memory" in config.database_url:
                     driver = "sqlite+aiosqlite"
                     full_url = (
-                        f"{driver}:///file:obloctabdb"  # noqa: E231
-                        "?mode=memory&cache=shared&uri=true"  # noqa: E231
+                        f"{driver}:///file:obloctabdb"
+                        "?mode=memory&cache=shared&uri=true"
                     )
                     log.info(f"Creating SQlAlchemy engine with " f"{full_url}")
                 else:

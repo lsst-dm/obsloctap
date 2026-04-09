@@ -58,13 +58,13 @@ class SqliteDbHelp:
             ddl = schema.read().split(";")
             try:  # make sure we are empty
                 await conn.execute(
-                    text(f"drop table {Obsplan.__tablename__}; ")  # noqa: E702
+                    text(f"drop table {Obsplan.__tablename__}; ")
                 )
                 await conn.commit()
             except Exception as e:
                 print(e)
             try:
-                await conn.execute(text(f"{ddl[0]}; "))  # noqa: E702
+                await conn.execute(text(f"{ddl[0]}; "))
                 await conn.commit()
             except Exception as e:
                 print(e)
@@ -98,9 +98,7 @@ class SqliteDbHelp:
 
         # Generate columns and named parameters
         columns = ", ".join(EXPOSURE_FIELDS)
-        placeholders = ", ".join(
-            f":{field}" for field in EXPOSURE_FIELDS  # noqa: E231
-        )
+        placeholders = ", ".join(f":{field}" for field in EXPOSURE_FIELDS)
 
         insert_sql = text(
             f"""

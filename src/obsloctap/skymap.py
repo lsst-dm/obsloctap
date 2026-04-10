@@ -113,7 +113,7 @@ _ECL_PLANE_COLOR = "#9966cc"  # muted purple
 # Both "Performed" and "Not Observed" are resolved outcomes that supersede
 # "Scheduled" — a scheduled entry is redundant once the fate of the pointing
 # is known, regardless of whether it was actually executed.
-# This should not be necessary and  duplicates should be reported
+# Duplicates will be addressed upstream and eventually this will not be needed
 _STATUS_PRIORITY: dict[str, int] = {
     "Performed": 0,
     "Not Observed": 1,
@@ -147,87 +147,31 @@ _FIGURE_HEIGHT = 620
 _COORD_SELECT_WIDTH = 300
 _TOGGLE_WIDTH = 155
 
-_GAL_TOGGLE_JS = """
-    const gal = coord_sel !== null && coord_sel.active === 1;
-    const on = cb_obj.active;
-    r_gal_eq.visible = on && !gal;
-    // galactic mode: no line (plane = b=0 grid equator)
-"""
+_JS_LIB = (Path(__file__).parent / "js" / "skymap_callbacks.js").read_text()
 
-_ECL_TOGGLE_JS = """
-    const gal = coord_sel !== null && coord_sel.active === 1;
-    const on = cb_obj.active;
-    r_ecl_eq.visible  = on && !gal;
-    r_ecl_gal.visible = on && gal;
-"""
 
-_COORD_SELECT_JS = """
-    const gal = cb_obj.active === 1;
-    const sfx = gal ? 'gal' : 'eq';
-    const d = src.data;
-    d['x'] = Array.from(d['x_' + sfx]);
-    d['y'] = Array.from(d['y_' + sfx]);
-    src.change.emit();
-    // One plane renderer per system; respect toggle active state.
-    t_gal.disabled = gal;
-    r_gal_eq.visible  = !gal && t_gal.active;
-    r_ecl_eq.visible  = !gal && t_ecl.active;
-    r_ecl_gal.visible =  gal && t_ecl.active;
-    r_ax_bot_eq.visible  = !gal;  r_ax_side_eq.visible  = !gal;
-    r_ax_bot_gal.visible =  gal;  r_ax_side_gal.visible =  gal;
-"""
+def _cb(call: str) -> str:
+    """Return the JS library plus a single callback entry-point call."""
+    return _JS_LIB + "\n" + call
 
-_PLOT_FILTER_JS = """
-    const activeBands = new Set(
-        band_cb.active.map((index) => band_names[index])
-    );
-    const threshold = Number(nexp_spinner.value) || 1;
-    const selectedStatus = status_select.value;
-    const selectedTarget = target_select.value;
-    const bands = src.data['band'];
-    const nexp = src.data['nexp_num'];
-    const statuses = src.data['status'];
-    const targets = src.data['target'];
-    for (let i = 0; i < filters.length; i++) {
-        const band = band_names[i];
-        renderers[i].visible = activeBands.has(band);
-        const mask = [];
-        for (let j = 0; j < bands.length; j++) {
-            const statusOk =
-                selectedStatus === 'All' || statuses[j] === selectedStatus;
-            const targetOk =
-                selectedTarget === 'All' || targets[j] === selectedTarget;
-            mask.push(
-                activeBands.has(bands[j]) &&
-                bands[j] === band &&
-                Number(nexp[j]) >= threshold &&
-                statusOk &&
-                targetOk
-            );
-        }
-        filters[i].booleans = mask;
-        filters[i].change.emit();
-    }
-    src.change.emit();
-"""
 
-_PDF_LINK_SYNC_JS = """
-    const link = document.getElementById('pdf-download-link');
-    if (!link) {
-        return;
-    }
-    const url = new URL(link.href, window.location.href);
-    const galactic = coord_sel !== null && coord_sel.active === 1;
-    url.searchParams.set('coordinates', galactic ? 'galactic' : 'equatorial');
-    url.searchParams.set('galactic_plane', String(!galactic && t_gal.active));
-    url.searchParams.set('ecliptic_plane', String(t_ecl.active));
-    link.href = url.toString();
-"""
+_GAL_TOGGLE_JS = _cb("galToggle(cb_obj, coord_sel, r_gal_eq);")
+_ECL_TOGGLE_JS = _cb("eclToggle(cb_obj, coord_sel, r_ecl_eq, r_ecl_gal);")
+_COORD_SELECT_JS = _cb(
+    "coordSelect(cb_obj, src, t_gal, t_ecl,"
+    " r_gal_eq, r_ecl_eq, r_ecl_gal,"
+    " r_ax_bot_eq, r_ax_side_eq, r_ax_bot_gal, r_ax_side_gal);"
+)
+_PLOT_FILTER_JS = _cb(
+    "plotFilter(src, band_cb, band_names, nexp_spinner,"
+    " status_select, target_select, filters, renderers);"
+)
+_PDF_LINK_SYNC_JS = _cb("pdfLinkSync(coord_sel, t_gal, t_ecl);")
 
 
 # Utility functions
 def _get_band(em_min: float, em_max: float) -> str:
-    """Return filter band name from stored spectral range values.
+    """Return filter band name computed from the spectral range values.
 
     Raises
     ------
@@ -350,9 +294,6 @@ def _sky_line_segments(
         seg_xs.append(cur_x)
         seg_ys.append(cur_y)
     return seg_xs, seg_ys
-
-
-# Main class
 
 
 class ScheduleSkyMap:

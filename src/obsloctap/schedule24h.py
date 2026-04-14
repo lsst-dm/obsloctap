@@ -110,14 +110,15 @@ class Schedule24:
 
     async def get_update_schedule24(self) -> int:
         """Get 24 hor schedule and put it in the obsplan table -
-        manage updates to come
+        afer consultaion wiht Lynne we simply delete to
+        overlapping old schedule
 
         Returns number of rows inserted"""
         visits = self.get_schedule24()
         log.debug(f"Got {visits.size} visits")
         obsplan = self.format_schedule(visits)
         dbhelp = await DbHelpProvider.getHelper()
-        await dbhelp.remove_flag(obsplan)
+        await dbhelp.remove_old(obsplan)
         await dbhelp.mark_old_obs()
         return await dbhelp.insert_obsplan(obsplan)
 

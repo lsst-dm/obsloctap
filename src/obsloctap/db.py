@@ -488,10 +488,41 @@ class DbHelp:
         res = await session.execute(text(update_stmt))
         return res.rowcount > 0
 
+    async def remove_old(self, observations: list[Obsplan]) -> int:
+        """Delete scheduled obsplan rows in the overall time window
+        covered by the passed observations.
+
+        Observations should be sorted by time so that:
+        - observations[0].t_min is the earliest start
+        - observations[-1].t_max is the latest end
+
+        Returns number of rows deleted.
+        """
+        if not observations:
+            return 0
+
+        mint = observations[0].t_min
+        maxt = observations[-1].t_max
+        sched = "Scheduled"
+
+        session = AsyncSession(self.engine)
+        stmt = (
+            f'delete from {self.schema}"{Obsplan.__tablename__}" '
+            f"where t_planning between {mint} and {maxt} "
+            f"and execution_status = '{sched}'"
+        )
+        log.debug(f"remove_old: {stmt}")
+        res = await session.execute(text(stmt))
+        await session.commit()
+        await session.close()
+        return res.rowcount or 0
+
     async def remove_flag(
         self, observations: list[Obsplan], priority: int = 2
     ) -> int:
         """Look at the obsplan table wrt to the new schedule,
+        delete observations in the time window of this new plan
+        if they are "'cheduled'
         If there is an existing observation that falls within the time
         window of a new scheduled observation and it has a different
         obs_id, delete the old one (it will be replaced by the new).

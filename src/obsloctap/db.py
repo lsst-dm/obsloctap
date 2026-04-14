@@ -181,6 +181,7 @@ class DbHelp:
         """
         session = AsyncSession(self.engine)
         inserted = 0
+        skipped = 0
         for observation in observations:
             # check for existing entry with same t_planning
             check_stmt = (
@@ -191,17 +192,17 @@ class DbHelp:
             result = await session.execute(text(check_stmt))
             exists = result.fetchone()
             if exists:
-                log.debug(
-                    f"Skipping insert for obs_id={observation.obs_id} "
-                    f"(already present)"
-                )
+                skipped += 1
                 continue
             await self.insert_obs(observation, session)
             inserted += 1
         if inserted > 0:
             await session.commit()
         await session.close()
-        log.info(f"Inserted and commited {inserted} Observations.")
+        log.info(
+            f"Inserted and commited {inserted} Observations"
+            f", Skipped {skipped}."
+        )
         return inserted
 
     async def find_by_obs_id(

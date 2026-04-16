@@ -529,7 +529,7 @@ class DbHelp:
         window of a new scheduled observation and it has a different
         obs_id, delete the old one (it will be replaced by the new).
         Any old observations within the overall window that are not
-        matched to a new observation will be marked as Not Observed.
+        matched to a new observation will be marked as  Aborted.
 
         Observations should be sorted on t_planning (descending).
 
@@ -574,7 +574,7 @@ class DbHelp:
                     # if ids are same, keep the old (it matches)
                     break
             if not matched:
-                # not matched to any new window -> mark as Not Observed
+                # not matched to any new window -> mark as Aborted
                 tomark.append(old.t_planning)
 
         # apply deletes and marks
@@ -633,14 +633,14 @@ class DbHelp:
         await session.close()
 
     async def mark_not_observed(self, ts: list[float]) -> int:
-        """Mark observations as Not Observed.
+        """Mark observations as aborted .
         Returns number of rows updated."""
         if not ts or len(ts) == 0:
             return 0
         session = AsyncSession(self.engine)
         stmt = (
             f'update {self.schema}"{Obsplan.__tablename__}"'
-            f" set execution_status = 'Not Observed' "
+            f" set execution_status = 'Aborted' "
             f" where t_planning in ({','.join(str(t) for t in ts)})"
         )
         log.debug(f"mark_obs: {stmt}")

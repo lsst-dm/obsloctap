@@ -501,15 +501,17 @@ class DbHelp:
         if not observations:
             return 0
 
-        mint = observations[0].t_min
-        maxt = observations[-1].t_max
+        maxt = observations[0].t_min
+        mint = observations[-1].t_max
         sched = "Scheduled"
+        abort = "Aborted"
 
         session = AsyncSession(self.engine)
         stmt = (
             f'delete from {self.schema}"{Obsplan.__tablename__}" '
             f"where t_planning between {mint} and {maxt} "
-            f"and execution_status = '{sched}'"
+            f"and execution_status in ('{sched}', '{abort}') "
+            f""
         )
         log.debug(f"remove_old: {stmt}")
         res = await session.execute(text(stmt))

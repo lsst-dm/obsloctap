@@ -119,7 +119,6 @@ class Schedule24:
         obsplan = self.format_schedule(visits)
         dbhelp = await DbHelpProvider.getHelper()
         await dbhelp.remove_old(obsplan)
-        await dbhelp.mark_old_obs()
         return await dbhelp.insert_obsplan(obsplan)
 
     async def do24hs(self, stopafter: int = 0) -> None:

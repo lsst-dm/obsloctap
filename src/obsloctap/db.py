@@ -415,8 +415,7 @@ class DbHelp:
 
     async def update_insert_nextVisit(self, obs: Obsplan) -> int:
         """
-        For given observation find it and update it or insert it and
-        mark one around same time as Aborted.
+        For given observation find it and update it or insert it
         Parameters
         ----------
         obs
@@ -611,7 +610,7 @@ class DbHelp:
             return 0
 
     async def mark_old_obs(self) -> None:
-        """Mark old observations `Not observed`
+        """Mark old observations `Aborted`
         if t_planning is in the past and it is still scheduled
         it is not happening.
         at least if its from yesterday it should go"""

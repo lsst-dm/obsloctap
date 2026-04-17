@@ -93,7 +93,7 @@ class Obsplan(BaseModel):
 
 
 class Exposure(BaseModel):
-    """this is to hold the consdb results - its not all cols"""
+    """this is to hold the consdb results - not all cols"""
 
     exposure_id: int
     obs_start_mjd: float
@@ -108,3 +108,4 @@ class Exposure(BaseModel):
     can_see_sky: int
     sky_rotation: float
     observation_reason: str
+    group_id: str

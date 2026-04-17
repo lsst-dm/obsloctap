@@ -85,7 +85,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
     @pytest.mark.asyncio
     async def test_insert_schedule(self) -> None:
         dbhelp = await TestDB.setup_db()
-        visits = pd.read_pickle("tests/schedule24rs.pkl")
+        visits = pd.read_pickle("tests/data/schedule24rs.pkl")
         obsplan = Schedule24().format_schedule(visits)
         await dbhelp.remove_flag(obsplan)
         await dbhelp.mark_old_obs()
@@ -132,7 +132,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
     @pytest.mark.asyncio
     async def test_update_entries(self) -> None:
         dbhelp = await TestDB.setup_db()
-        visits = pd.read_pickle("tests/schedule24rs.pkl")
+        visits = pd.read_pickle("tests/data/schedule24rs.pkl")
         obsplan = Schedule24().format_schedule(visits)
         await dbhelp.insert_obsplan(obsplan)
         oldest = await dbhelp.find_oldest_plan()
@@ -183,7 +183,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         # Load exposure from pickle file for testing
         plans = len(await dbhelp.get_schedule(time=0))
         assert plans == 0  # should be empty
-        with open("tests/consdb60858.pkl", "rb") as f:
+        with open("tests/data/consdb60852.pkl", "rb") as f:
             exposures = pickle.load(f)
         cdbh: ConsDbHelp = await ConsDbHelpProvider.getHelper()
         exps = cdbh.process(exposures)
@@ -204,7 +204,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
     @pytest.mark.asyncio
     async def test_find_by_obs_id(self) -> None:
         dbhelp = await TestDB.setup_db()
-        visits = pd.read_pickle("tests/schedule24rs.pkl")
+        visits = pd.read_pickle("tests/data/schedule24rs.pkl")
         obsplan = Schedule24().format_schedule(visits)
         await dbhelp.insert_obsplan(obsplan)
 
@@ -228,7 +228,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
     @pytest.mark.asyncio
     async def test_update_insert_nextVisit(self) -> None:
         dbhelp = await TestDB.setup_db()
-        visits = pd.read_pickle("tests/schedule24rs.pkl")
+        visits = pd.read_pickle("tests/data/schedule24rs.pkl")
         obsplan = Schedule24().format_schedule(visits)
         await dbhelp.insert_obsplan(obsplan)
 

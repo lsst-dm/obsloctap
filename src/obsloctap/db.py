@@ -270,8 +270,11 @@ class DbHelp:
         for exp in exposures:
             # Find matching obsplan entries
             done = False
-            # simple case obs_id matches exposure_id
-            idmatch = await self.find_by_obs_id(exp.exposure_id, session)
+            # simple case obs_id matches group_id
+            idmatch = await self.find_by_obs_id(exp.group_id, session)
+            if len(idmatch) == 0:
+                # obs_id matches exposure_id
+                idmatch = await self.find_by_obs_id(exp.exposure_id, session)
             if len(idmatch) > 0:
                 # update execution_status to 'Performed' etc
                 if await self.update_one(exp, idmatch[0], session):
@@ -489,8 +492,10 @@ class DbHelp:
         return res.rowcount > 0
 
     async def remove_old(self, observations: list[Obsplan]) -> int:
-        """Delete scheduled obsplan rows in the overall time window
+        """
+        Delete scheduled obsplan rows in the overall time window
         covered by the passed observations.
+        Delte all future observaitons for good measuere.
 
         Observations should be sorted by time so that:
         - observations[0].t_min is the earliest start
@@ -501,8 +506,8 @@ class DbHelp:
         if not observations:
             return 0
 
-        maxt = observations[0].t_min
-        mint = observations[-1].t_max
+        maxt = observations[0].t_max
+        mint = observations[-1].t_min
         sched = "Scheduled"
         abort = "Aborted"
 
@@ -511,13 +516,25 @@ class DbHelp:
             f'delete from {self.schema}"{Obsplan.__tablename__}" '
             f"where t_planning between {mint} and {maxt} "
             f"and execution_status in ('{sched}', '{abort}') "
-            f""
         )
         log.debug(f"remove_old: {stmt}")
         res = await session.execute(text(stmt))
+        count = res.rowcount or 0
+
+        t: Time = Time.now()
+        now = t.to_value("mjd")
+        stmt = (
+            f'delete from {self.schema}"{Obsplan.__tablename__}" '
+            f"where t_planning > {now} "
+            f"and execution_status in ('{sched}', '{abort}') "
+        )
+        log.debug(f"remove_old2: {stmt}")
+        res = await session.execute(text(stmt))
+        count += res.rowcount or 0
+
         await session.commit()
         await session.close()
-        return res.rowcount or 0
+        return count
 
     async def remove_flag(
         self, observations: list[Obsplan], priority: int = 2
@@ -618,7 +635,6 @@ class DbHelp:
         at least if its from yesterday it should go"""
         session = AsyncSession(self.engine)
         t: Time = Time.now() + TimeDelta(30 * u.h)
-
         told = t.to_value("mjd")
         nob = "Aborted"
         sched = "Scheduled"

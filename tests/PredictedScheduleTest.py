@@ -35,11 +35,11 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
 
     async def test_kafka_nextVisit(self) -> None:
         schema = {}
-        with open("tests/schema317.pkl", "rb") as s:
+        with open("tests/data/schema317.pkl", "rb") as s:
             schema = pickle.load(s)
         msg = None
         # this is a binary message dumped form kafka
-        with open("tests/nextVisit_mt.pkl", "rb") as f:
+        with open("tests/data/nextVisit_mt.pkl", "rb") as f:
             msg = pickle.load(f)
         msg_dict: dict = unpack_value(msg.value, schema)
 
@@ -51,11 +51,11 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
 
     async def test_kafka_schema(self) -> None:
         schema = {}
-        with open("tests/schema2191.pkl", "rb") as s:
+        with open("tests/data/schema2191.pkl", "rb") as s:
             schema = pickle.load(s)
         msg = None
         # this is a binary message dumped form kafka
-        with open("tests/predicted_message.pkl", "rb") as f:
+        with open("tests/data/predicted_message.pkl", "rb") as f:
             msg = pickle.load(f)
         msg_dict: dict = unpack_value(msg.value, schema)
 
@@ -72,7 +72,7 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
 
     async def test_kafka(self) -> None:
         # Load data from pickle file for testing
-        with open("tests/predicted_kafka.pkl", "rb") as f:
+        with open("tests/data/predicted_kafka.pkl", "rb") as f:
             predicted = pickle.load(f)
         obsplan = convert_predicted_kafka(predicted)
         count = len(obsplan)
@@ -85,7 +85,7 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
 
     def test_convert(self) -> None:
         # Load data from pickle file for testing
-        with open("tests/predicted.pkl", "rb") as f:
+        with open("tests/data/predicted.pkl", "rb") as f:
             predicted = pickle.load(f)
         predicted.to_parquet("predicted.parquet")
         plan = convert_predicted(predicted)
@@ -95,10 +95,10 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
 
     def test_msg(self) -> None:
         # schema = get_schema()
-        with open("tests/message_mt.pkl", "rb") as f:
+        with open("tests/data/message_mt.pkl", "rb") as f:
             msg = pickle.load(f)
         assert msg
-        with open("tests/schema2191.pkl", "rb") as s:
+        with open("tests/data/schema2191.pkl", "rb") as s:
             schema = pickle.load(s)
         print(f"testing kafka - {msg.timestamp} " f"index: {msg.key}")
         rec = unpack_value(msg.value, schema)
@@ -111,7 +111,7 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
         lite = SqliteDbHelp()
         dbhelp = await SqliteDbHelp.getSqlLite()
         await lite.setup_schema()
-        visits = pd.read_pickle("tests/schedule24rs.pkl")
+        visits = pd.read_pickle("tests/data/schedule24rs.pkl")
         obsplan = Schedule24().format_schedule(visits)
         entries = await dbhelp.insert_obsplan(obsplan)
         obs = await dbhelp.get_schedule(0)

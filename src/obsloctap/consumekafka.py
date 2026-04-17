@@ -112,6 +112,7 @@ def convert_predicted_kafka(msg: dict) -> list[Obsplan]:
 
 def convert_nextVisit(msg: dict) -> Obsplan:
     plan = Obsplan()
+    plan.obs_id = msg["groupId"]  # putting this here for now .
     plan.s_ra = msg["position"][0]
     plan.s_dec = msg["position"][1]
     plan.rubin_nexp = msg["nimages"]
@@ -123,7 +124,7 @@ def convert_nextVisit(msg: dict) -> Obsplan:
     plan.rubin_rot_sky_pos = msg["cameraAngle"]
     plan.target_name = msg["survey"]
     if msg["filters"]:
-        spectral_range = spectral_ranges[msg["filters"]]
+        spectral_range = spectral_ranges[msg["filters"][0]]
         plan.em_min = spectral_range[0]
         plan.em_max = spectral_range[1]
     plan.priority = 0  # 99% going to happen

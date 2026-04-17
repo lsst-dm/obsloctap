@@ -19,7 +19,7 @@ schema_fn = "schema2191.pkl"
 async def env() -> None:
     # config = Configuration()
     id = 317
-    with open(f"tests/schema{id}.json", "rb") as s:
+    with open(f"tests/data/schema{id}.json", "rb") as s:
         schema = json.load(s)
     try:
         schema = get_schema(id)
@@ -41,7 +41,7 @@ async def dump_msg() -> None:
         schema_id = struct.unpack(">I", value[1:5])[0]
         schema = {}
 
-        with open(f"tests/schema{schema_id}.pkl", "rb") as s:
+        with open(f"tests/data/schema{schema_id}.pkl", "rb") as s:
             schema = pickle.load(s)
         try:
             schema = get_schema(schema_id)

@@ -96,13 +96,13 @@ _BAND_NAMES: set[str] = set(FILTER_COLORS.keys())
 STATUS_MARKER: dict[str, str] = {
     "Scheduled": "circle",
     "Performed": "square",
-    "Not Observed": "triangle",
+    "Aborted": "triangle",
 }
 
 STATUS_ALPHA: dict[str, float] = {
     "Scheduled": 1.0,
     "Performed": 0.85,
-    "Not Observed": 0.30,
+    "Aborted": 0.30,
 }
 
 _GAL_PLANE_COLOR = "#ccaa00"  # gold
@@ -110,13 +110,13 @@ _ECL_PLANE_COLOR = "#9966cc"  # muted purple
 
 # Status priority for deduplication
 # Lower number = kept over higher number.
-# Both "Performed" and "Not Observed" are resolved outcomes that supersede
+# Both "Performed" and "Aborted" are resolved outcomes that supersede
 # "Scheduled" — a scheduled entry is redundant once the fate of the pointing
 # is known, regardless of whether it was actually executed.
 # Duplicates will be addressed upstream and eventually this will not be needed
 _STATUS_PRIORITY: dict[str, int] = {
     "Performed": 0,
-    "Not Observed": 1,
+    "Aborted": 1,
     "Scheduled": 2,
 }
 
@@ -689,7 +689,7 @@ class ScheduleSkyMap:
         status_label = Div(
             text=f'<span style="{_s}">Execution Status:</span>',
         )
-        known_statuses = ["Scheduled", "Performed", "Not Observed"]
+        known_statuses = ["Scheduled", "Performed", "Aborted"]
         status_values = [str(v) for v in source.data.get("status", [])]
         status_options = ["All"] + [
             s for s in known_statuses if s in status_values
@@ -1321,11 +1321,11 @@ class ScheduleSkyMap:
 
         The service returns two records for the same physical observation when
         a resolved outcome is known: one 'Scheduled' entry (from the plan) and
-        one 'Not Observed' or 'Performed' entry (from the execution record).
+        one 'Aborted' or 'Performed' entry (from the execution record).
         The 'Scheduled' entry is redundant once the outcome is known, so we
         keep only the highest-priority status per unique pointing:
 
-            Performed > Not Observed > Scheduled
+            Performed > Aborted > Scheduled
 
         Any duplicate found is written to ``obsloctap_duplicates.txt``
         (appended) so data-quality issues can be investigated.
@@ -1333,7 +1333,7 @@ class ScheduleSkyMap:
         Raises
         ------
         ValueError
-            If the same pointing carries both 'Performed' and 'Not Observed'
+            If the same pointing carries both 'Performed' and 'Aborted'
             statuses — a data inconsistency in the upstream service.
         """
         seen: dict[tuple, Obsplan] = {}
@@ -1345,10 +1345,10 @@ class ScheduleSkyMap:
                 seen[key] = obs
             else:
                 pair = {obs.execution_status, existing.execution_status}
-                if pair == {"Performed", "Not Observed"}:
+                if pair == {"Performed", "Aborted"}:
                     raise ValueError(
                         f"Data inconsistency: pointing {key} is recorded as"
-                        " both 'Performed' and 'Not Observed'. An observation"
+                        " both 'Performed' and 'Aborted'. An observation"
                         " cannot be both executed and not executed — this"
                         " indicates a bug in the upstream scheduling data."
                     )
@@ -1407,7 +1407,7 @@ class ScheduleSkyMap:
         * ``time_utc`` becomes a ``<br>``-separated list of all times (sorted).
         * ``nexp``     becomes the **total** across all merged visits.
         * ``status``   is the highest-priority status in the group
-                       (Performed > Not Observed > Scheduled).
+                       (Performed > Aborted > Scheduled).
 
         Parameters
         ----------

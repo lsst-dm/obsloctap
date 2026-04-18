@@ -134,8 +134,8 @@ def convert_nextVisit(msg: dict) -> Obsplan:
 def get_schema(schema_id: int = 2191) -> dict:
     global SCHEMA
     if schema_id not in SCHEMA:
-        log.debug(f"Get schema id: {schema_id}")
         schema_url = config.kafka_schema_url
+        log.debug(f"Get schema : {schema_url}/schemas/ids/{schema_id}")
         with httpx.Client(timeout=10.0) as client:
             r = client.get(f"{schema_url}/schemas/ids/{schema_id}")
             r.raise_for_status()

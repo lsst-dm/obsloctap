@@ -119,6 +119,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                 entries += updated
                 exec += 1
                 sleeptime = stime
+                db.mark_aborted_older(now)
             else:  # it is in the future
                 sleeptime = round(sched - now, 1) * 86400
                 log.debug(

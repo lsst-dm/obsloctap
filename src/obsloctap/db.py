@@ -648,6 +648,21 @@ class DbHelp:
         await session.commit()
         await session.close()
 
+    async def mark_aborted_older(self, time: float) -> int:
+        """Mark observations as aborted  before time (mjd).
+        Returns number of rows updated."""
+        session = AsyncSession(self.engine)
+        stmt = (
+            f'update {self.schema}"{Obsplan.__tablename__}"'
+            f" set execution_status = 'Aborted' "
+            f" where t_planning < {time}"
+        )
+        log.debug(f"mark_aborted: {stmt}")
+        res = await session.execute(text(stmt))
+        await session.commit()
+        await session.close()
+        return res.rowcount
+
     async def mark_not_observed(self, ts: list[float]) -> int:
         """Mark observations as aborted .
         Returns number of rows updated."""

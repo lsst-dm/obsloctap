@@ -83,17 +83,21 @@ async def do_exp_updates(stopafter: int = 0) -> int:
             log.info(f"Did not find any observered plan going to {fillin}")
 
         cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
+        inserted = 0
         if fillin < now:
-            log.info(f"Doing consdb fillin from {fillin} to {now} ")
             exposures = await cdb.get_exposures_between(fillin, now)
+            log.info(
+                f"Doing consdb fillin from {fillin} to {now} -"
+                f" got {len(exposures)} "
+            )
             session = db.get_session()
             for exp in exposures:
-                await db.insert_exposure(exp, session)
+                ok = await db.insert_exposure(exp, session)
+                if ok:
+                    inserted += 1
             await session.commit()
             await session.close()
-            log.info(
-                f"Inserted {len(exposures or [])} exp going back to {fillin}"
-            )
+            log.info(f"Inserted {inserted} exp going back to {fillin}")
             if exposures:
                 lastconsdb = exposures[-1].obs_start_mjd
         else:
@@ -114,7 +118,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                 prior = min(sched, lastconsdb)
                 exposures = await cdb.get_exposures_between(prior, now)
                 if exposures:
-                    lastconsdb = exposures[-1].obs_start_mjd
+                    lastconsdb = exposures[0].obs_start_mjd
                 updated, inserted = await db.update_insert_exposures(exposures)
                 entries += updated
                 exec += 1
@@ -126,7 +130,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                     f"Oldest obs MJD is {sched} it is now {now}, "
                     f"exposure update will sleep {sleeptime} "
                 )
-            if count % 100 == 0:
+            if count % 10 == 0:
                 log.info(
                     f"Update exposures {count} runs "
                     f"executed {exec} updates."
@@ -141,7 +145,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
             ConsDbHelpProvider.consdb_helper = (
                 None  # make it get a new connection
             )
-            log.exception("exposure update error")
+            log.exception("exposure update error - backing off")
     return count
 
 

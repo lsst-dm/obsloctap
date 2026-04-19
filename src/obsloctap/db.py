@@ -217,7 +217,7 @@ class DbHelp:
             close_session = True
         stmt = (
             f'SELECT * FROM {self.schema}"{Obsplan.__tablename__}" '
-            f'WHERE obs_id == "{obs_id}"'
+            f"WHERE obs_id = '{obs_id}'"
         )
         result = await session.execute(text(stmt))
         matches = result.fetchall()

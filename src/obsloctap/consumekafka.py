@@ -165,7 +165,7 @@ async def process_message(msg: ConsumerRecord) -> None:
     log.info(f"Processing kafka - {msg.key} {msg.timestamp} ")
     record = unpack_message(msg)
     if record["salIndex"] != config.salIndex:
-        log.info(f"Skipping message - salIndex not {config.salIndex}")
+        log.debug(f"Skipping message - salIndex not {config.salIndex}")
         return
     db: DbHelp = await DbHelpProvider.getHelper()
     if "nextVisit" in msg.topic:

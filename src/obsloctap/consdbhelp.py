@@ -127,7 +127,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
             else:  # it is in the future
                 sleeptime = round(sched - now, 1) * 86400
                 log.debug(
-                    f"Oldest obs MJD is {sched} it is now {now}, "
+                    f"Oldest scheduled obs MJD is {sched} it is now {now}, "
                     f"exposure update will sleep {sleeptime} "
                 )
             if count % 10 == 0:

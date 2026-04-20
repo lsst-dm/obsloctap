@@ -142,6 +142,10 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(0, fillin, " Nothign is observed ")
         helper = await TestConsdb.setup_db()
         start = consdbstarttime
+        first = obsplan[-1].t_planning  # should be the oldest
+        last = obsplan[0].t_planning  # should be the newest
+        self.assertGreater(last, first, "Order of the plans is wrong ?")
+        self.assertEqual(oldest, first, "Expected to find the first plan")
         assert oldest < start
 
         plans = len(await dbhelp.get_schedule(time=0))

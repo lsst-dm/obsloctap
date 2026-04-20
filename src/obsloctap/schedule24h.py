@@ -115,7 +115,6 @@ class Schedule24:
 
         Returns number of rows inserted"""
         visits = self.get_schedule24()
-        log.debug(f"Got {visits.size} visits")
         obsplan = self.format_schedule(visits)
         dbhelp = await DbHelpProvider.getHelper()
         await dbhelp.remove_old(obsplan)

@@ -604,9 +604,7 @@ class DbHelp:
     ) -> float:
         """Look for entries with t_planning  in the past and it is still
         status(default scheduled may never be anything else),
-        do the opposite query if negate is true
-        the oldes one will give the start time to seach for
-        expoosures end time can be now
+        do the opposite query if negate is true (not shceduled)
 
         """
         comp = "="
@@ -617,7 +615,7 @@ class DbHelp:
             f"select t_planning as t from "
             f'{self.schema}"{Obsplan.__tablename__}"'
             f" where t_planning > 0 and execution_status {comp} '{status}' "
-            f" order by t_planning DESC limit 1 "
+            f" order by t_planning ASC limit 1 "
         )
         log.debug(statement)
         res = await session.execute(text(statement))

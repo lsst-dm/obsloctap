@@ -255,6 +255,7 @@ class DbHelp:
         exposures: list[Exposure],
         tol: float = 0.01,
         timetol: TimeDelta = sec30,
+        session_touse: AsyncSession = None,
     ) -> tuple[int, int]:
         """
         Update obsplan entries that match exposures by s_ra, s_dec,
@@ -263,15 +264,22 @@ class DbHelp:
         Check it is not 'performed' if it is onlyupdate if same id.
         Returns the number of updated and inserted entries in a tupple.
         """
-        session = AsyncSession(self.engine)
-        session_look = AsyncSession(self.engine)
+
+        if session_touse:
+            # for test this seems to need one session
+            session = session_touse
+            session_look = session_touse
+        else:
+            # for real a single session deadlocks
+            session = AsyncSession(self.engine)
+            session_look = AsyncSession(self.engine)
         updated = 0
         unmatched = 0
         inserted = 0
         for exp in exposures:
             # Find matching obsplan entries
             done = False
-            # simple case obs_id matches group_id - using this session locks
+            # simple case obs_id matches group_id
             idmatch = await self.find_by_obs_id(exp.group_id, session_look)
             if len(idmatch) == 0:
                 # obs_id matches exposure_id
@@ -316,9 +324,10 @@ class DbHelp:
                 if await self.insert_exposure(exp, session):
                     inserted += 1
 
-        await session.commit()
-        await session.close()
-        await session_look.close()
+        if not session_touse:
+            await session.commit()
+            await session.close()
+            await session_look.close()
         log.info(
             f"Updated {updated}, unmatched {unmatched}, "
             f"inserted {inserted} of {len(exposures)}"
@@ -326,7 +335,7 @@ class DbHelp:
         return (updated, inserted)
 
     async def insert_exposure(
-        self, exp: Exposure, session: AsyncSession
+        self, exp: Exposure, session: AsyncSession = None
     ) -> bool:
         """Put in an obsplan line based on an exposure.
         This is when consdb has an observation but it does not match
@@ -377,8 +386,15 @@ class DbHelp:
             f"values ({value_str}) "
         )
         try:
-            res = await session.execute(text(insert_stmt))
-            return res.rowcount > 0
+            if session is None:
+                s = self.get_session()
+                res = await s.execute(text(insert_stmt))
+                await s.commit()
+                await s.close()
+                return res.rowcount > 0
+            else:
+                res = await session.execute(text(insert_stmt))
+                return res.rowcount > 0
         except Exception as e:
             log.error(f"Failed to insert exposure {exp.exposure_id}: {e}")
             return False
@@ -474,7 +490,7 @@ class DbHelp:
         await session.execute(text(update_stmt))
 
     async def update_one(
-        self, exp: Exposure, match: Row, session: AsyncSession
+        self, exp: Exposure, match: Row, session: AsyncSession = None
     ) -> bool:
         """update an obsplan line based on an exposure
          setting it to performed
@@ -492,8 +508,17 @@ class DbHelp:
             f"rubin_rot_sky_pos = {exp.sky_rotation} "
             f"WHERE obs_id = '{match.obs_id}'"
         )
-        res = await session.execute(text(update_stmt))
-        return res.rowcount > 0
+        ok = False
+        if session is None:
+            s = self.get_session()
+            res = await s.execute(text(update_stmt))
+            s.commit()
+            s.close()
+            ok = res.rowcount > 0
+        else:
+            res = await session.execute(text(update_stmt))
+            ok = res.rowcount > 0
+        return ok
 
     async def remove_old(self, observations: list[Obsplan]) -> int:
         """

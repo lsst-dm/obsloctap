@@ -155,16 +155,33 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         end = consdbendless2
         exposures = await helper.get_exposures_between(start, end)
         noexps = len(exposures)
-        updated, inserted = await dbhelp.update_insert_exposures(exposures)
+        sess = dbhelp.get_session()
+        updated, inserted = await dbhelp.update_insert_exposures(
+            exposures, session_touse=sess
+        )
+        await sess.commit()
         assert updated == 0  # no overlap here - no updates
         # but all exposures are added/inserted
         assert inserted == noexps
 
         plans2 = await dbhelp.get_schedule(time=0)
-        assert len(plans2) == plans + noexps
+        cplans2 = len(plans2)
+        assert cplans2 == plans + noexps
+
+        # in the test session the above inserts seem
+        # to dissappear after the query
+        plans2 = await dbhelp.get_schedule(time=0)
+        cplans2 = len(plans2)
+        assert cplans2 == plans + noexps
 
         # exposures not matching were added as observations above
-        updated, inserted = await dbhelp.update_insert_exposures(exposures)
+        # test sessions seem to work very differently to real ones
+        # so passing as session here
+        updated, inserted = await dbhelp.update_insert_exposures(
+            exposures, session_touse=sess
+        )
+        sess.commit()
+        sess.close()
         # so all of these should be updated
         self.assertEqual(updated, noexps)  # should have updated the exposures
         plans2 = await dbhelp.get_schedule(time=0)

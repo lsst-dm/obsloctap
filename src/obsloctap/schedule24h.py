@@ -19,6 +19,7 @@ __all__ = ["Schedule24"]
 import asyncio
 from operator import attrgetter
 
+import astropy.units as u
 import structlog
 from astropy.time import Time, TimeDelta
 from pandas import DataFrame
@@ -110,7 +111,7 @@ class Schedule24:
 
     async def get_update_schedule24(self) -> int:
         """Get 24 hor schedule and put it in the obsplan table -
-        afer consultaion wiht Lynne we simply delete to
+        afer consultation with Lynne we simply delete the
         overlapping old schedule
 
         Returns number of rows inserted"""
@@ -118,6 +119,10 @@ class Schedule24:
         obsplan = self.format_schedule(visits)
         dbhelp = await DbHelpProvider.getHelper()
         await dbhelp.remove_old(obsplan)
+        # mark older than 12 hour obs as aborted
+        t: Time = Time.now() - TimeDelta(12 * u.h)
+        told = t.to_value("mjd")
+        await dbhelp.mark_aborted_older(told)
         return await dbhelp.insert_obsplan(obsplan)
 
     async def do24hs(self, stopafter: int = 0) -> None:
@@ -126,7 +131,7 @@ class Schedule24:
         config = Configuration()
         # config hours - sleep is in seconds
         stime = config.sleeptime * 60 * 60
-        # this will be tru always unless we pass in a number which is for test
+        # this will be true always unless we pass in a number which is for test
         log.info("Starting 24hr schedule updates ")
         while stopafter != self.count:
             slp = stime

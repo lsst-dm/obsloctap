@@ -87,8 +87,6 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         dbhelp = await TestDB.setup_db()
         visits = pd.read_pickle("tests/data/schedule24rs.pkl")
         obsplan = Schedule24().format_schedule(visits)
-        await dbhelp.remove_flag(obsplan)
-        await dbhelp.mark_old_obs()
         count = await dbhelp.insert_obsplan(obsplan)
         assert count == len(visits)
         plans = await dbhelp.get_schedule(

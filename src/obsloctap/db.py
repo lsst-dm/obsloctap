@@ -264,17 +264,20 @@ class DbHelp:
         Returns the number of updated and inserted entries in a tupple.
         """
         session = AsyncSession(self.engine)
+        session_look = AsyncSession(self.engine)
         updated = 0
         unmatched = 0
         inserted = 0
         for exp in exposures:
             # Find matching obsplan entries
             done = False
-            # simple case obs_id matches group_id
-            idmatch = await self.find_by_obs_id(exp.group_id, session)
+            # simple case obs_id matches group_id - using this session locks
+            idmatch = await self.find_by_obs_id(exp.group_id, session_look)
             if len(idmatch) == 0:
                 # obs_id matches exposure_id
-                idmatch = await self.find_by_obs_id(exp.exposure_id, session)
+                idmatch = await self.find_by_obs_id(
+                    exp.exposure_id, session_look
+                )
             if len(idmatch) > 0:
                 # update execution_status to 'Performed' etc
                 if await self.update_one(exp, idmatch[0], session):
@@ -291,7 +294,7 @@ class DbHelp:
                     exp.s_ra,
                     exp.s_dec,
                     exp.obs_start_mjd,
-                    session,
+                    session_look,
                     tol,
                     timetol,
                 )
@@ -315,6 +318,7 @@ class DbHelp:
 
         await session.commit()
         await session.close()
+        await session_look.close()
         log.info(
             f"Updated {updated}, unmatched {unmatched}, "
             f"inserted {inserted} of {len(exposures)}"
@@ -626,26 +630,6 @@ class DbHelp:
         else:
             return 0
 
-    async def mark_old_obs(self) -> None:
-        """Mark old observations `Aborted`
-        if t_planning is in the past and it is still scheduled
-        it is not happening.
-        at least if its from yesterday it should go"""
-        session = AsyncSession(self.engine)
-        t: Time = Time.now() + TimeDelta(30 * u.h)
-        told = t.to_value("mjd")
-        nob = "Aborted"
-        sched = "Scheduled"
-        stmt = (
-            f'update {self.schema}"{Obsplan.__tablename__}"'
-            f" set execution_status = '{nob}' "
-            f" where t_planning < {told} AND execution_status = '{sched}' "
-        )
-        log.debug(f"mark_old_obs: {stmt}")
-        await session.execute(text(stmt))
-        await session.commit()
-        await session.close()
-
     async def mark_aborted_older(self, time: float) -> int:
         """Mark observations as aborted  before time (mjd).
         Returns number of rows updated."""
@@ -655,11 +639,12 @@ class DbHelp:
             f" set execution_status = 'Aborted' "
             f" where t_planning < {time}"
         )
-        log.debug(f"mark_aborted: {stmt}")
         res = await session.execute(text(stmt))
         await session.commit()
         await session.close()
-        return res.rowcount
+        count = res.rowcount
+        log.debug(f"marked aborted({count}): {stmt}")
+        return count
 
     async def mark_not_observed(self, ts: list[float]) -> int:
         """Mark observations as aborted .

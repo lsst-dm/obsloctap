@@ -90,14 +90,8 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                 f"Doing consdb fillin from {fillin} to {now} -"
                 f" got {len(exposures)} "
             )
-            session = db.get_session()
-            for exp in exposures:
-                ok = await db.insert_exposure(exp, session)
-                if ok:
-                    inserted += 1
-            await session.commit()
-            await session.close()
-            log.info(f"Inserted {inserted} exp going back to {fillin}")
+            # was only inserting but should really do match
+            updated, inserted = await db.update_insert_exposures(exposures)
             if exposures:
                 lastconsdb = exposures[-1].obs_start_mjd
         else:
@@ -123,7 +117,6 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                 entries += updated
                 exec += 1
                 sleeptime = stime
-                db.mark_aborted_older(now)
             else:  # it is in the future
                 sleeptime = round(sched - now, 1) * 86400
                 log.debug(
@@ -137,6 +130,8 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                     f"Updated {entries} total planning lines"
                     f"Sleeping {sleeptime}s"
                 )
+            # anything not now performed is aborted
+            db.mark_aborted_older(now)
             # if we  have a scheduled observation could sleep until then.
             await asyncio.sleep(sleeptime)
         except Exception:

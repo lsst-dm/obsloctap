@@ -18,6 +18,7 @@ __all__ = ["Schedule24"]
 
 import asyncio
 from operator import attrgetter
+from urllib.error import URLError
 
 import astropy.units as u
 import structlog
@@ -113,8 +114,8 @@ class Schedule24:
         """Get 24 hor schedule and put it in the obsplan table -
         afer consultation with Lynne we simply delete the
         overlapping old schedule
-
         Returns number of rows inserted"""
+
         visits = self.get_schedule24()
         obsplan = self.format_schedule(visits)
         dbhelp = await DbHelpProvider.getHelper()
@@ -147,4 +148,8 @@ class Schedule24:
                 log.exception(
                     f"Problem with 24 hour schedule - will try agin in {slp}s"
                 )
+            except URLError:
+                log.exception("URL/network error")
+            except Exception:
+                log.exception("Unexpected error")
             await asyncio.sleep(slp)

@@ -50,6 +50,20 @@ let originalData = [];
 let data = [];
 let mjdFields = ["t_planning"];
 
+function initInputsFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+
+  const start = params.get("start");
+  const time = params.get("time");
+
+  if (start !== null) {
+    document.getElementById("startInput").value = start;
+  }
+  if (time !== null) {
+    document.getElementById("timeInput").value = time;
+  }
+}
+
 async function fetchMap() {
   document.getElementById('status').textContent = "Loading map…";
   try {
@@ -141,7 +155,8 @@ function renderTable() {
   });
 }
 
-// Auto-fetch data on page load
+// Auto-fetch data on page load - but using inputs provided
+initInputsFromQuery();
 fetchData();
 
 </script>

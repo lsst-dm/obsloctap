@@ -375,6 +375,7 @@ class ScheduleSkyMap:
             path_prefix=self.path_prefix,
             swatch_html=self._build_swatch_html(),
             start_encoded=quote(self.start_val, safe=""),
+            time_encoded=quote(str(self.time_val), safe=""),
             stats_html=self._build_stats_html(),
             band_panel_div=band_panel_div,
             div=plot_div,

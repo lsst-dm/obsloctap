@@ -29,7 +29,7 @@
     <label>Time (Hours): <input type="number" step="any" id="timeInput" value="12"></label>
     <button onclick="fetchData()">Fetch</button>
     <button onclick="resetJson()">Reset JSON</button>
-    <a href="/obsloctap/skymap" style="display: inline-block; margin: 5px; padding: 4px 10px; background: #3535a0; color: white; text-decoration: none; border-radius: 4px; font-size: 1em;">Map View</a>
+    <button onclick="fetchMap()">Map View</button>
   </div>
   <div>
     <label>Filter by execution_status:
@@ -49,6 +49,19 @@
 let originalData = [];
 let data = [];
 let mjdFields = ["t_planning"];
+
+async function fetchMap() {
+  document.getElementById('status').textContent = "Loading map…";
+  try {
+    const start = encodeURIComponent(document.getElementById('startInput').value);
+    const time = encodeURIComponent(document.getElementById('timeInput').value);
+
+    const url = `/obsloctap/skymap?start=${start}&time=${time}`;
+    window.location.href = url;
+  } catch (e) {
+    document.getElementById('status').textContent = "Error: " + e.message;
+  }
+}
 
 async function fetchData() {
   document.getElementById('status').textContent = "Loading…";

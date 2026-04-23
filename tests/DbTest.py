@@ -180,8 +180,8 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         updated, inserted = await dbhelp.update_insert_exposures(
             exposures, session_touse=sess
         )
-        sess.commit()
-        sess.close()
+        await sess.commit()
+        await sess.close()
         # so all of these should be updated
         self.assertEqual(updated, noexps)  # should have updated the exposures
         plans2 = await dbhelp.get_schedule(time=0)

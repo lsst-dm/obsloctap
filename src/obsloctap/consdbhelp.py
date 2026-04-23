@@ -131,7 +131,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                     f"Sleeping {sleeptime}s"
                 )
             # anything not now performed is aborted
-            db.mark_aborted_older(now)
+            await db.mark_aborted_older(now)
             # if we  have a scheduled observation could sleep until then.
             await asyncio.sleep(sleeptime)
         except Exception:

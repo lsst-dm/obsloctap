@@ -111,8 +111,8 @@ class DbHelp:
         self, time: float = 0, start: Time | None = None
     ) -> list[Obsplan]:
         """Return the latest schedule item from the DB.
-         time is a number of hours from start for how much schedule to return
-         if no start is provided now in UTC is assumed
+        time is a number of hours from start for how much schedule to return
+        if no start is provided now in UTC is assumed
         if time is zero we just take top obsplanLimit(1000) rows."""
 
         config = Configuration()
@@ -121,7 +121,7 @@ class DbHelp:
         limitclause = f" limit  {config.obsplanLimit}"
 
         if time != 0:
-            now = start if start else Time.now()
+            now = start if start else Time.now().utc
             startmjd = now.to_value("mjd")
             td = TimeDelta(time * u.hr)
             win = now + td
@@ -185,6 +185,7 @@ class DbHelp:
             session = AsyncSession(self.engine)
             inserted = 0
             skipped = 0
+            log.info(f"Insert Obsplan with {len(observations)}")
             for observation in observations:
                 # check for existing entry with same t_planning
                 check_stmt = (
@@ -197,8 +198,14 @@ class DbHelp:
                 if exists:
                     skipped += 1
                     continue
-                await self.insert_obs(observation, session)
-                inserted += 1
+                ok = await self.insert_obs(observation, session)
+                if ok:
+                    inserted += 1
+                else:
+                    log.error(
+                        f"Failed ot insert {observation.t_planning}, "
+                        f"{observation.obs_id}."
+                    )
             if inserted > 0:
                 await session.commit()
             await session.close()
@@ -566,7 +573,7 @@ class DbHelp:
             res = await session.execute(text(stmt))
             count = res.rowcount or 0
 
-            t: Time = Time.now()
+            t: Time = Time.now().utc
             now = t.to_value("mjd")
             stmt = (
                 f'delete from {self.schema}"{Obsplan.__tablename__}" '

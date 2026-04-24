@@ -71,7 +71,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
     exec = 0
     entries = 0
 
-    now = Time.now().to_value("mjd")
+    now = Time.now().utc.to_value("mjd")
     lastconsdb = now
     # look for the last update so NOT scheduled
     try:
@@ -79,7 +79,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
         if fillin == 0:
             # go back 24 hours anyway
             h24 = TimeDelta("24hr")
-            fillin = (Time.now() - h24).to_value("mjd")
+            fillin = (now - h24).to_value("mjd")
             log.info(f"Did not find any observered plan going to {fillin}")
 
         cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
@@ -105,7 +105,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
         try:
             # oldest scheduled job if it should have happened ..
             sched = await db.find_oldest_plan()
-            now = Time.now().to_value("mjd")
+            now = Time.now().utc.to_value("mjd")
             if sched < now:  # we may have something to do it is in the past
                 cdb = await ConsDbHelpProvider.getHelper()
                 # just go back to last condb entry we got if its earlier

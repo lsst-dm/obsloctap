@@ -52,7 +52,7 @@ class Index(BaseModel):
 class Obsplan(BaseModel):
     """Obsplan table for the schedule"""
 
-    __tablename__ = "ObsPlan"
+    __tablename__ = "obsplan"
     # logevent_predictedSchedule.mjd
     t_planning: float = 0.0  # mjd
     target_name: str = ""
@@ -60,7 +60,7 @@ class Obsplan(BaseModel):
     obs_collection: str = ""  # dataId[’collection’]?
     s_ra: float = 0.0  # ra from the scheduled observation
     s_dec: float = 0.0  # dec from the scheduled observation
-    s_fov: int = 3  # always 3
+    s_fov: float = 3.5  # always 3
     s_region: str = ""
     # we could do this, though not sure we should store it
     s_resolution: float = 0.2  # always 0.2 arcsec
@@ -82,7 +82,7 @@ class Obsplan(BaseModel):
     instrument_name: str = "LSSTCam"  # dataId[’instrument’]
     t_plan_exptime: float = 30.0  # logevent_predictedSchedule.mjd
     category: str = "Fixed"
-    priority: int = 1  # 1
+    priority: int = 2  # 1
     execution_status: str = "Scheduled"
     # Scheduled, Unscheduled, Performed, Aborted
     tracking_type: str = "Sidereal"
@@ -93,7 +93,7 @@ class Obsplan(BaseModel):
 
 
 class Exposure(BaseModel):
-    """this is to hold the consdb results - its not all cols"""
+    """this is to hold the consdb results - not all cols"""
 
     exposure_id: int
     obs_start_mjd: float
@@ -108,3 +108,4 @@ class Exposure(BaseModel):
     can_see_sky: int
     sky_rotation: float
     observation_reason: str
+    group_id: str

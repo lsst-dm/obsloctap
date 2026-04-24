@@ -14,7 +14,7 @@ from tests.DBmock import SqliteDbHelp
 
 class MockSchedule(Schedule24):
     def get_schedule24(self) -> DataFrame:
-        visits = pd.read_pickle("tests/schedule24-2506.pkl")
+        visits = pd.read_pickle("tests/data/schedule24-2506.pkl")
         if type(visits) is not DataFrame:
             visits = DataFrame(visits)
         return visits
@@ -37,7 +37,7 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
 
     def test_schedule_format(self) -> None:
         # schedule24rs.pkl is from the api call (see testutils)
-        visits = pd.read_pickle("tests/schedule24rs.pkl")
+        visits = pd.read_pickle("tests/data/schedule24rs.pkl")
         if type(visits) is not DataFrame:
             visits = DataFrame(visits)
         obs = Schedule24().format_schedule(visits)

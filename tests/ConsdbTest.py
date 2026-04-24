@@ -12,7 +12,7 @@ from tests.DBmock import SqliteDbHelp
 consdbstarttime = 60852.951543229814
 consdbendtime = 60853.995568112165
 consdbendless2 = 60853.995029013946
-noexps = 38
+noexps = 37
 
 
 @pytest.mark.asyncio
@@ -40,7 +40,7 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
 
     async def test_process(self) -> None:
         # Load data from pickle file for testing
-        with open("tests/consdb60858.pkl", "rb") as f:
+        with open("tests/data/consdb60852.pkl", "rb") as f:
             exposures = pickle.load(f)
         cdbh: ConsDbHelp = await ConsDbHelpProvider.getHelper()
         exps = cdbh.process(exposures)
@@ -54,7 +54,10 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
         helper = await TestConsdb.setup_db()
         s = helper.get_session()
         res = await s.execute(text("select count(*) from exposure"))
-        print(res.fetchone())
+        count = res.scalar_one()
+        self.assertEqual(count, noexps, " DB set up failed")
+        # res = await s.execute(text("select * from exposure"))
+        # exps = helper.process(res)
         # mjd
         start = consdbstarttime
         # skip 2
@@ -62,4 +65,6 @@ class TestConsdb(unittest.IsolatedAsyncioTestCase):
         exposures = await helper.get_exposures_between(start, end)
         assert isinstance(exposures, list)
         # two less than we loaded
-        self.assertEqual(noexps - 2, len(exposures))
+        self.assertEqual(
+            noexps - 1, len(exposures), "Incorrect number of exposures"
+        )

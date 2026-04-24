@@ -47,9 +47,10 @@ EXPOSURE_FIELDS = [
     "target_name",
     "science_program",
     "scheduler_note",
-    "can_see_sky",
     "sky_rotation",
+    "can_see_sky",
     "observation_reason",
+    "group_id",
 ]
 
 # Configure logging
@@ -82,17 +83,15 @@ async def do_exp_updates(stopafter: int = 0) -> int:
             log.info(f"Did not find any observered plan going to {fillin}")
 
         cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
+        inserted = 0
         if fillin < now:
-            log.info(f"Doign consdb fillin from {fillin} to {now} ")
             exposures = await cdb.get_exposures_between(fillin, now)
-            session = db.get_session()
-            for exp in exposures:
-                await db.insert_exposure(exp, session)
-            await session.commit()
-            await session.close()
             log.info(
-                f"Inserted {len(exposures or [])} exp going back to {fillin}"
+                f"Doing consdb fillin from {fillin} to {now} -"
+                f" got {len(exposures)} "
             )
+            # was only inserting but should really do match
+            updated, inserted = await db.update_insert_exposures(exposures)
             if exposures:
                 lastconsdb = exposures[-1].obs_start_mjd
         else:
@@ -102,6 +101,7 @@ async def do_exp_updates(stopafter: int = 0) -> int:
         log.exception("exposure update error in fillin")
     # this will be true always unless we pass in a number which is for test
     while stopafter != count:
+        count += 1
         try:
             # oldest scheduled job if it should have happened ..
             sched = await db.find_oldest_plan()
@@ -112,33 +112,35 @@ async def do_exp_updates(stopafter: int = 0) -> int:
                 prior = min(sched, lastconsdb)
                 exposures = await cdb.get_exposures_between(prior, now)
                 if exposures:
-                    lastconsdb = exposures[-1].obs_start_mjd
-                entries += await db.update_entries(exposures)
+                    lastconsdb = exposures[0].obs_start_mjd
+                updated, inserted = await db.update_insert_exposures(exposures)
+                entries += updated
                 exec += 1
                 sleeptime = stime
             else:  # it is in the future
                 sleeptime = round(sched - now, 1) * 86400
                 log.debug(
-                    f"Oldest obs MJD is {sched} it is now {now}, "
+                    f"Oldest scheduled obs MJD is {sched} it is now {now}, "
                     f"exposure update will sleep {sleeptime} "
                 )
-            if count % 100 == 0:
+            if count % 10 == 0:
                 log.info(
                     f"Update exposures {count} runs "
                     f"executed {exec} updates."
                     f"Updated {entries} total planning lines"
                     f"Sleeping {sleeptime}s"
                 )
-            count += 1
+            # anything not now performed is aborted
+            db.mark_aborted_older(now)
             # if we  have a scheduled observation could sleep until then.
             await asyncio.sleep(sleeptime)
         except Exception:
-            # back off
+            # back off - we really just want this to keep running
             sleeptime = 2 * sleeptime
             ConsDbHelpProvider.consdb_helper = (
                 None  # make it get a new connection
             )
-            log.exception("exposure update error")
+            log.exception("exposure update error - backing off")
     return count
 
 
@@ -207,15 +209,15 @@ class ConsDbHelpProvider:
             config = Configuration()
             driver = "postgresql+asyncpg"
             full_url = (
-                f"{driver}://{config.consdb_username}:"  # noqa: E231
+                f"{driver}://{config.consdb_username}:"
                 f"{config.consdb_password}@"
                 f"{config.consdb_url}/{config.consdb_database}"
             )
             if "memory" in config.consdb_url:
                 driver = "sqlite+aiosqlite"
                 full_url = (  # just using one db for sqllite
-                    f"{driver}:///file:obloctabdb"  # noqa: E231
-                    "?mode=memory&cache=shared&uri=true"  # noqa: E231
+                    f"{driver}:///file:obloctabdb"
+                    "?mode=memory&cache=shared&uri=true"
                 )
                 log.info(
                     f"Creating SQlAlchemy engine For CONSDB with "

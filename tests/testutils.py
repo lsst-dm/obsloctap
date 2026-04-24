@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pickle
 import struct
 import sys
@@ -15,6 +16,20 @@ schema_fn = "schema2191.pkl"
 # Environment variables from deployment
 
 
+async def env() -> None:
+    # config = Configuration()
+    id = 317
+    with open(f"tests/data/schema{id}.json", "rb") as s:
+        schema = json.load(s)
+    try:
+        schema = get_schema(id)
+    except Exception as e:
+        print(f"failed to get schemas {e}")
+
+    with open(f"schema{id}.pkl", "wb") as f:
+        pickle.dump(schema, f)
+
+
 async def dump_msg() -> None:
     consumer = get_consumer()
     print(f"Starting consumer {consumer} ")
@@ -25,7 +40,8 @@ async def dump_msg() -> None:
         assert magic == 0, "Not Confluent Avro wire format"
         schema_id = struct.unpack(">I", value[1:5])[0]
         schema = {}
-        with open("tests/schema2191.pkl", "rb") as s:
+
+        with open(f"tests/data/schema{schema_id}.pkl", "rb") as s:
             schema = pickle.load(s)
         try:
             schema = get_schema(schema_id)
@@ -34,6 +50,9 @@ async def dump_msg() -> None:
 
         msg_dict = unpack_value(value, schema)
         if msg_dict["salIndex"] == 1:
+            # next visit schema_id = 317
+            if "nextVisit" in msg.topic:
+                msg_fn = "nextVisit_mt.pkl"
             with open(f"schema{schema_id}.pkl", "wb") as f:
                 pickle.dump(schema, f)
             with open(msg_fn, "wb") as f:
@@ -71,6 +90,8 @@ if __name__ == "__main__":
     if "msg" in sys.argv:
         asyncio.run(dump_msg())
         done = True
+    elif "env" in sys.argv:
+        asyncio.run(env())
     elif "consdb" in sys.argv:
         asyncio.run(store_consdb_file())
         done = True

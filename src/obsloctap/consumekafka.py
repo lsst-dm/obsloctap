@@ -21,21 +21,25 @@ import aiokafka
 import httpx
 import structlog
 from aiokafka import ConsumerRecord
+from astropy.time import Time
 from fastavro import parse_schema, schemaless_reader
 from pandas import DataFrame
 
 from obsloctap.config import config
 from obsloctap.db import DbHelp, DbHelpProvider
-from obsloctap.models import Obsplan
+from obsloctap.models import Obsplan, spectral_ranges
 
 # Configure logging
 log = structlog.getLogger(__name__)
 jaas = ("org.apache.kafka.common.security.scram.ScramLoginModule required",)
 
 # need schedule updates
-topic = "lsst.sal.Scheduler.logevent_predictedSchedule"
-SCHEMA: dict | None = None
+topic = [
+    "summit.lsst.sal.Scheduler.logevent_predictedSchedule",
+    "summit.lsst.sal.ScriptQueue.logevent_nextVisit",
+]
 
+SCHEMA: dict = {}
 COLS = [  # as in the schedule message Kafka or EFD
     "mjd",
     "ra",
@@ -72,7 +76,7 @@ def convert_predicted(msg: DataFrame) -> list[Obsplan]:
             v = msg[f"{COLS[cc]}{count}"].head().values[0]
             p.__setattr__(TO_COLS[cc], v)
             cc += 1
-        p.priority = 2  # more likely than 24 hr schedule
+        p.priority = 1  # more likely than 24 hr schedule
         if p.t_planning and p.t_planning > 0:
             plan.append(p)
         count += 1
@@ -106,18 +110,40 @@ def convert_predicted_kafka(msg: dict) -> list[Obsplan]:
     return plan
 
 
+def convert_nextVisit(msg: dict) -> Obsplan:
+    plan = Obsplan()
+    plan.obs_id = msg["groupId"]  # putting this here for now .
+    plan.s_ra = msg["position"][0]
+    plan.s_dec = msg["position"][1]
+    plan.rubin_nexp = msg["nimages"]
+    plan.t_planning = (
+        Time.now().to_value("mjd")
+        if msg["startTime"] == 0
+        else msg["startTime"]
+    )
+    plan.rubin_rot_sky_pos = msg["cameraAngle"]
+    plan.target_name = msg["survey"]
+    if msg["filters"]:
+        spectral_range = spectral_ranges[msg["filters"][0]]
+        plan.em_min = spectral_range[0]
+        plan.em_max = spectral_range[1]
+    plan.priority = 0  # 99% going to happen
+    return plan
+
+
 def get_schema(schema_id: int = 2191) -> dict:
     global SCHEMA
-    if not SCHEMA:
-        log.debug(f"Get schema id: {schema_id}")
+    if schema_id not in SCHEMA:
         schema_url = config.kafka_schema_url
+        log.debug(f"Get schema : {schema_url}/schemas/ids/{schema_id}")
         with httpx.Client(timeout=10.0) as client:
             r = client.get(f"{schema_url}/schemas/ids/{schema_id}")
             r.raise_for_status()
             schema_json = r.json()["schema"]  # string
             schema_dict = json.loads(schema_json)  # dict
-            SCHEMA = parse_schema(schema_dict)
-    return SCHEMA
+            ps = parse_schema(schema_dict)
+            SCHEMA[schema_id] = ps
+    return SCHEMA[schema_id]
 
 
 def unpack_value(value: Any, schema: dict) -> dict:
@@ -139,17 +165,23 @@ async def process_message(msg: ConsumerRecord) -> None:
     log.info(f"Processing kafka - {msg.key} {msg.timestamp} ")
     record = unpack_message(msg)
     if record["salIndex"] != config.salIndex:
-        log.info(f"Skipping message - salIndex not {config.salIndex}")
+        log.debug(f"Skipping message - salIndex not {config.salIndex}")
         return
-    # log.debug(record)
-    plan = convert_predicted_kafka(record)
-    log.info(
-        f"Got {record['numberOfTargets']} numberOfTargets "
-        f"converted to {len(plan)} Obsplans"
-    )
     db: DbHelp = await DbHelpProvider.getHelper()
-    await db.remove_flag(plan)
-    await db.insert_obsplan(plan)
+    if "nextVisit" in msg.topic:
+        log.debug(record)
+        obs = convert_nextVisit(record)
+        # nextVisit is published for all sorts not just on sky ..
+        if obs.s_ra != 0 and obs.s_dec != 0:
+            await db.update_insert_nextVisit(obs)
+    else:
+        plan = convert_predicted_kafka(record)
+        log.info(
+            f"Got {record['numberOfTargets']} numberOfTargets "
+            f"converted to {len(plan)} Obsplans"
+        )
+        await db.remove_flag(plan)
+        await db.insert_obsplan(plan)
 
 
 def get_consumer() -> aiokafka.AIOKafkaConsumer:
@@ -157,8 +189,8 @@ def get_consumer() -> aiokafka.AIOKafkaConsumer:
         f"Setting up consumer with bootstrap {config.kafka_bootstrap}  "
         f"group {config.kafka_group_id} user {config.kafka_user}"
     )
-    return aiokafka.AIOKafkaConsumer(
-        topic,
+
+    consumer = aiokafka.AIOKafkaConsumer(
         bootstrap_servers=config.kafka_bootstrap,
         group_id=f"{config.kafka_group_id}",
         auto_offset_reset="earliest",
@@ -168,6 +200,8 @@ def get_consumer() -> aiokafka.AIOKafkaConsumer:
         sasl_plain_username=config.kafka_user,
         sasl_plain_password=config.kafka_password,
     )
+    consumer.subscribe(topics=topic)
+    return consumer
 
 
 async def consume() -> None:

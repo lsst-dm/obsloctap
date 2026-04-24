@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rubin All-Sky Schedule Map</title>
+  {{ cdn_tags }}
+  <link rel="icon" href="{{ path_prefix }}/static/favicon.ico" type="image/x-icon">
+  {% raw %}
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      background: #080818;
+      color: #dde0f0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0;
+      padding: 14px 18px;
+    }
+    a {
+      color: #7777ff;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .header img {
+      height: 46px;
+    }
+
+    .header h1 {
+      font-size: 1.45em;
+      margin: 0;
+      color: #c0c8ff;
+      font-weight: 600;
+    }
+    .header-link {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      font-size: 0.9em;
+    }
+    .page-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .top-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .left-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .panel {
+      background: #12122a;
+      border: 1px solid #25254a;
+      border-radius: 8px;
+      padding: 10px 18px;
+    }
+
+    .panel--flex {
+      display: flex;
+      flex-direction: column;
+      height: 0;
+      min-height: 100%;
+      overflow: hidden;
+    }
+
+
+    .panel-title {
+      font-size: 0.8em;
+      color: #8888bb;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .controls label {
+      font-size: 0.88em;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .controls span.label-text {
+      font-size: 0.8em;
+      color: #8888bb;
+    }
+    .controls input {
+      background: #1e1e38;
+      color: #dde0f0;
+      border: 1px solid #3a3a6a;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-size: 0.88em;
+      width: 190px;
+    }
+    .controls input[name="time"] {
+      width: 120px;
+    }
+    .controls input:focus {
+      outline: 1px solid #6666cc;
+    }
+
+    .controls button {
+      background: #3535a0;
+      color: white;
+      border: none;
+      padding: 8px 22px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.9em;
+      align-self: flex-end;
+    }
+    .controls button:hover {
+      background: #5555c0;
+    }
+
+    .control-link {
+      background: #3535a0;
+      color: white;
+      border: none;
+      padding: 8px 22px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.9em;
+      align-self: flex-end;
+      text-decoration: none;
+      display: inline-block;
+      line-height: 1.2;
+    }
+    .control-link:hover {
+      background: #5555c0;
+      color: white;
+      text-decoration: none;
+    }
+    .info {
+      font-size: 0.82em;
+      color: #6666aa;
+      margin-bottom: 5px;
+    }
+    .legend-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-left: 4px;
+    }
+    .legend-downloads {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .subsection {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .subsection-title {
+      font-size: 0.8em;
+      color: #8888bb;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .legend-bar {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      font-size: 0.8em;
+      color: #aaaacc;
+    }
+    .legend-status {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      font-size: 0.8em;
+      color: #aaaacc;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.2);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .plot-container {
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+      width: 100%;
+    }
+
+    .plot-container .selection-panel {
+      background: #12122a;
+      border: 1px solid #25254a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 0 0 10px 0;
+    }
+    .plot-container .selection-panel .selection-row {
+      justify-content: flex-start;
+      margin-bottom: 6px;
+      margin-left: 0;
+    }
+    .plot-container .selection-panel .selection-row:last-child {
+      margin-bottom: 0;
+    }
+    body .plot-container .selection-panel .bk-row,
+    body .plot-container .selection-panel .bk-Row {
+      margin-left: 0;
+      padding-left: 0;
+    }
+    .resource-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 0.8em;
+    }
+    .download-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 0.8em;
+      padding-left: 4px;
+    }
+    .band-panel-host .bk {
+      font-size: 0.8em;
+    }
+    .band-panel-host {
+      display: flex;
+      justify-content: flex-start;
+      align-items: flex-start;
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+    body .band-panel-host .bk-row,
+    body .band-panel-host .bk-Row,
+    body .band-panel-host .band-panel-inline {
+      align-items: center;
+      column-gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      margin-left: 0;
+      padding-left: 0;
+      row-gap: 8px;
+    }
+    .band-panel-host .band-panel-stack {
+      align-items: flex-start;
+    }
+    .band-panel-host .band-panel-top-row {
+      flex-wrap: nowrap;
+    }
+    .band-panel-host .band-panel-top-row .bk-CheckboxGroup,
+    .band-panel-host .band-panel-top-row .bk-checkbox-group {
+      flex-wrap: nowrap;
+      white-space: nowrap;
+    }
+    .band-panel-host .bk-CheckboxGroup,
+    .band-panel-host .bk-checkbox-group {
+      width: auto;
+      flex: 0 1 auto;
+    }
+    .band-panel-host label {
+      font-size: 0.8em;
+    }
+    .band-panel-host input[type="checkbox"],
+    .band-panel-host .bk-input[type="checkbox"] {
+      transform: scale(0.86);
+      transform-origin: center;
+    }
+    .band-panel-host .bk-input,
+    .band-panel-host input {
+      font-size: 0.8em;
+    }
+    .band-panel-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+      color: #aaaacc;
+      font-size: 0.8em;
+    }
+    .dl-btn {
+      background: #1e1e3a;
+      color: #b0b8e8;
+      border: 1px solid #3535aa;
+      padding: 4px 14px;
+      border-radius: 4px;
+      text-decoration: none;
+      transition: background 0.15s;
+      font-size: 0.8em;
+    }
+    .plot-container .selection-panel .bk {
+      font-size: 0.8em;
+    }
+    .plot-container .selection-panel label,
+    .plot-container .selection-panel .bk-input-group label,
+    .plot-container .selection-panel .bk-CheckboxGroup label {
+      font-size: 0.8em;
+    }
+    .plot-container .selection-panel input,
+    .plot-container .selection-panel .bk-input {
+      font-size: 0.8em;
+    }
+    .dl-btn:hover {
+      background: #303060;
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .info-tip {
+      cursor: help;
+      font-size: 0.85em;
+      color: #7777cc;
+      position: relative;
+      display: inline-block;
+      margin-left: 3px;
+    }
+    .info-tip::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 130%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e1e3a;
+      color: #dde0f0;
+      border: 1px solid #4444aa;
+      border-radius: 5px;
+      padding: 5px 10px;
+      white-space: nowrap;
+      font-size: 1.1em;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+      z-index: 100;
+    }
+    .info-tip:hover::after {
+      opacity: 1;
+    }
+
+    /* ── Summary statistics ───────────────────────────────────────────────── */
+    .stat-grid {
+      align-items: stretch;
+      display: flex;
+      flex: 1;
+      gap: 32px;
+      margin-top: 6px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .stat-wrap {
+      flex: 0 0 auto;
+    }
+
+    .stat-wrap--field {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .stat-field-title {
+      flex-shrink: 0;
+      font-size: 0.98em;
+      font-weight: 600;
+      color: #8888bb;
+      padding-bottom: 4px;
+    }
+
+    .stat-field-header {
+      flex-shrink: 0;
+    }
+
+    .stat-field-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      scrollbar-color: #333366 transparent;
+      scrollbar-width: thin;
+    }
+    .stat-table {
+      border-collapse: collapse;
+      font-size: 0.86em;
+      color: #ccd0e8;
+      white-space: nowrap;
+    }
+    .stat-table caption {
+      font-size: 0.98em;
+      font-weight: 600;
+      color: #8888bb;
+      text-align: left;
+      padding-bottom: 4px;
+      caption-side: top;
+    }
+    .stat-table th {
+      color: #7777bb;
+      font-weight: 500;
+      border-bottom: 1px solid #2a2a4a;
+      padding: 2px 14px 2px 0;
+      text-align: right;
+    }
+    .stat-table th:first-child {
+      text-align: left;
+    }
+
+    .stat-table td {
+      padding: 1px 14px 1px 0;
+      text-align: right;
+      border-bottom: 1px solid #16162a;
+    }
+    .stat-table td:first-child {
+      max-width: 280px;
+      overflow: hidden;
+      text-align: left;
+      text-overflow: ellipsis;
+    }
+    .stat-table tfoot td {
+      font-weight: 600;
+      border-top: 1px solid #2a2a4a;
+      border-bottom: none;
+      color: #aaaacc;
+      padding-top: 4px;
+    }
+
+    .stat-table--field-header,
+    .stat-table--field-body {
+      table-layout: fixed;
+      width: 100%;
+    }
+
+    .stat-table--field-header th:nth-child(2),
+    .stat-table--field-header th:nth-child(3),
+    .stat-table--field-body td:nth-child(2),
+    .stat-table--field-body td:nth-child(3),
+    .stat-table--field-body tfoot td:nth-child(2),
+    .stat-table--field-body tfoot td:nth-child(3) {
+      width: 90px;
+    }
+    .stat-swatch {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 5px;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+    .stat-obs-info {
+      margin-left: 10px;
+      color: #6666aa;
+      font-weight: normal;
+      font-size: 0.96em;
+    }
+    .controls-form {
+      align-items: flex-end;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin: 0;
+    }
+
+    .legend-label {
+      color: #8888bb;
+    }
+
+    @media (min-width: 1080px) {
+      .top-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.20fr) minmax(0, 1.30fr);
+        align-items: stretch;
+      }
+    }
+  </style>
+  {% endraw %}
+</head>
+<body>
+  <div class="header">
+    <img src="{{ path_prefix }}/static/logo.svg" alt="Rubin Observatory logo">
+    <h1>Rubin LSST — All-Sky Schedule Map</h1>
+    <div class="header-link">
+      <a href="https://prompt-products.lsst.io/tutorials/notebook/notebook-102.html" target="_blank" rel="noopener">Tutorial notebook</a>
+    </div>
+  </div>
+
+  <div class="page-grid">
+    <div class="top-grid">
+      <div class="left-stack">
+        <section class="panel">
+          <div class="panel-title">Data Range</div>
+          <div class="controls">
+            <form method="get" action="{{ path_prefix }}/skymap" class="controls-form">
+              <label>
+                <span class="label-text">Start (MJD / ISO / "now")</span>
+                <input name="start" value="{{ start_val }}" placeholder="now">
+              </label>
+              <label>
+                <span class="label-text">Lookahead hours (1–48)</span>
+                <input type="number" name="time" min="1" max="48" value="{{ time_val }}">
+              </label>
+              <button type="submit">Update Map</button>
+              <a class="control-link" href="{{ path_prefix }}/static/viewer.html?start={{ start_encoded }}&time={{ time_encoded }}">Table View</a>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="legend-downloads">
+            <div class="subsection">
+              <div class="subsection-title">Legend</div>
+              <div class="legend-panel">
+                <div class="legend-bar">
+                  <strong class="legend-label">Band:</strong>
+                  {{ swatch_html }}
+                </div>
+                <div class="legend-status">
+                  <strong class="legend-label">Status:</strong>
+                  <span class="legend-item">● Scheduled
+                    <span class="info-tip" data-tip="Planned observation but not yet executed">ⓘ</span>
+                  </span>
+                  <span class="legend-item">■ Performed
+                    <span class="info-tip" data-tip="Observation carried out as planned">ⓘ</span>
+                  </span>
+                  <span class="legend-item">▲ Aborted
+                    <span class="info-tip" data-tip="The planned observation was not executed">ⓘ</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="subsection">
+              <div class="subsection-title">Downloads</div>
+              <div class="download-bar">
+                <span class="legend-label">Download data:</span>
+                <a class="dl-btn"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;format=json"
+                   download="obsloctap_schedule.json">JSON</a>
+                <a class="dl-btn"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;format=csv"
+                   download="obsloctap_schedule.csv">CSV</a>
+                <a class="dl-btn"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;format=parquet"
+                   download="obsloctap_schedule.parquet">Parquet</a>
+                <span class="legend-label">Sky plot:</span>
+                <a class="dl-btn"
+                   id="pdf-download-link"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;format=pdf&amp;coordinates=equatorial&amp;galactic_plane=true&amp;ecliptic_plane=true"
+                   download="obsloctap_schedule.pdf">PDF</a>
+              </div>
+            </div>
+
+            <div class="subsection">
+              <div class="subsection-title">Filter by</div>
+              <div class="band-panel-row">
+                <div class="band-panel-host">
+                  {{ band_panel_div }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel panel--flex">
+        <div class="panel-title">Summary Statistics</div>
+        {{ stats_html }}
+      </section>
+    </div>
+  </div>
+
+  <div class="plot-container">
+    {{ div }}
+  </div>
+  {{ script }}
+</body>
+</html>

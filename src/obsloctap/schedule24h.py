@@ -18,7 +18,9 @@ __all__ = ["Schedule24"]
 
 import asyncio
 from operator import attrgetter
+from urllib.error import URLError
 
+import astropy.units as u
 import structlog
 from astropy.time import Time, TimeDelta
 from pandas import DataFrame
@@ -84,7 +86,7 @@ class Schedule24:
             obs = Obsplan()
             obs.target_name = v["target_name"]  # should be scheduler_note
             obs.obs_id = v["target_name"]  # target_id is not passed
-            obs.priority = 2
+            obs.priority = 0
             obs.execution_status = "Scheduled"
             obs.s_ra = v["fieldRA"]
             obs.s_dec = v["fieldDec"]
@@ -110,15 +112,18 @@ class Schedule24:
 
     async def get_update_schedule24(self) -> int:
         """Get 24 hor schedule and put it in the obsplan table -
-        manage updates to come
-
+        afer consultation with Lynne we simply delete the
+        overlapping old schedule
         Returns number of rows inserted"""
+
         visits = self.get_schedule24()
-        log.debug(f"Got {visits.size} visits")
         obsplan = self.format_schedule(visits)
         dbhelp = await DbHelpProvider.getHelper()
-        await dbhelp.remove_flag(obsplan)
-        await dbhelp.mark_old_obs()
+        await dbhelp.remove_old(obsplan)
+        # mark older than 12 hour obs as aborted
+        t: Time = Time.now() - TimeDelta(12 * u.h)
+        told = t.to_value("mjd")
+        await dbhelp.mark_aborted_older(told)
         return await dbhelp.insert_obsplan(obsplan)
 
     async def do24hs(self, stopafter: int = 0) -> None:
@@ -127,7 +132,7 @@ class Schedule24:
         config = Configuration()
         # config hours - sleep is in seconds
         stime = config.sleeptime * 60 * 60
-        # this will be tru always unless we pass in a number which is for test
+        # this will be true always unless we pass in a number which is for test
         log.info("Starting 24hr schedule updates ")
         while stopafter != self.count:
             slp = stime
@@ -143,4 +148,8 @@ class Schedule24:
                 log.exception(
                     f"Problem with 24 hour schedule - will try agin in {slp}s"
                 )
+            except URLError:
+                log.exception("URL/network error")
+            except Exception:
+                log.exception("Unexpected error")
             await asyncio.sleep(slp)

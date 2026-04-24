@@ -13,6 +13,7 @@ from obsloctap.db import DbHelp, DbHelpProvider
 
 __all__ = ["SqliteDbHelp"]
 
+from obsloctap.models import Obsplan
 
 EXPOSURE_DDL = """
 CREATE TABLE exposure (
@@ -28,7 +29,8 @@ CREATE TABLE exposure (
     scheduler_note TEXT,
     can_see_sky INTEGER DEFAULT 1,
     sky_rotation REAL default 0,
-    observation_reason TEXT
+    observation_reason TEXT,
+    group_id TEXT
 );
 """
 
@@ -43,9 +45,10 @@ columns_types = {
     "target_name": str,
     "science_program": str,
     "scheduler_note": str,
-    "can_see_sky": int,
+    "can_see_sky": bool,
     "sky_rotation": float,
     "observation_reason": str,
+    "group_id": str,
 }
 
 
@@ -56,12 +59,14 @@ class SqliteDbHelp:
             conn = db.get_session()
             ddl = schema.read().split(";")
             try:  # make sure we are empty
-                await conn.execute(text('drop table "ObsPlan";'))  # noqa: E702
+                await conn.execute(
+                    text(f"drop table {Obsplan.__tablename__}; ")
+                )
                 await conn.commit()
             except Exception as e:
                 print(e)
             try:
-                await conn.execute(text(f"{ddl[0]}; "))  # noqa: E702
+                await conn.execute(text(f"{ddl[0]}; "))
                 await conn.commit()
             except Exception as e:
                 print(e)
@@ -90,14 +95,12 @@ class SqliteDbHelp:
 
     async def load_and_insert_consdb(self, conn: AsyncSession) -> None:
         # Load data from pickle file for testing
-        with open("tests/consdb60858.pkl", "rb") as f:
+        with open("tests/data/consdb60852.pkl", "rb") as f:
             exposures = pickle.load(f)
 
         # Generate columns and named parameters
         columns = ", ".join(EXPOSURE_FIELDS)
-        placeholders = ", ".join(
-            f":{field}" for field in EXPOSURE_FIELDS  # noqa: E231
-        )
+        placeholders = ", ".join(f":{field}" for field in EXPOSURE_FIELDS)
 
         insert_sql = text(
             f"""

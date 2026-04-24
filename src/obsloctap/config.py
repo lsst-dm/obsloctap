@@ -26,145 +26,151 @@ class Configuration(BaseSettings):
     name: str = Field(
         "obsloctap",
         title="Name of application",
-        env="SAFIR_NAME",
+        validation_alias="SAFIR_NAME",
     )
 
     path_prefix: str = Field(
         "/obsloctap",
         title="URL prefix for application",
-        env="SAFIR_PATH_PREFIX",
+        validation_alias="SAFIR_PATH_PREFIX",
     )
 
     profile: Profile = Field(
         Profile.development,
         title="Application logging profile",
-        env="SAFIR_PROFILE",
+        validation_alias="SAFIR_PROFILE",
     )
 
     log_level: LogLevel = Field(
         LogLevel.INFO,
         title="Log level of the application's logger",
-        env="SAFIR_LOG_LEVEL",
+        validation_alias="SAFIR_LOG_LEVEL",
     )
 
     database: str = Field(
         "",
         title="postgres database name",
-        env="database",
+        validation_alias="database",
     )
 
     database_url: str = Field(
         "",
         title="URL for postgres database",
-        env="database_url",
+        validation_alias="database_url",
     )
 
     database_user: str = Field(
         "",
         title="user for postgres database",
-        env="database_user",
+        validation_alias="database_user",
     )
 
     database_password: str = Field(
         "",
         title="password for postgres database",
-        env="database_password",
+        validation_alias="database_password",
     )
 
     database_schema: str = Field(
         "obsloctap",
         title="schema for postgres database",
-        env="database_schema",
+        validation_alias="database_schema",
     )
 
     obsplanLimit: int = Field(
         1000,
         title="Limit to use on obsplan query",
-        env="obsplanLimit",
+        validation_alias="obsplanLimit",
     )
 
     obsplanTimeSpan: int = Field(
         24,
         title="Time to look back in obsplan query with time in hours",
-        env="obsplanTimeSpan",
+        validation_alias="obsplanTimeSpan",
     )
 
     sleeptime: float = Field(
         12,
         title="Hours to sleep before getting 24 hour scheulde again",
-        env="sleeptime",
+        validation_alias="sleeptime",
     )
 
     exp_sleeptime: float = Field(
         2,
         title="Minutes to sleep before looking for exposures to update plan",
-        env="exp_sleeptime",
+        validation_alias="exp_sleeptime",
     )
 
     consdb_database: str = Field(
         "exposurelog",
         title="Consdb postgres database name",
-        env="consdb_database",
+        validation_alias="consdb_database",
     )
 
     consdb_url: str = Field(
         "usdf-summitdb-replica.slac.stanford.edu:5432",
         title="URL for postgres database",
-        env="consdb_url",
+        validation_alias="consdb_url",
     )
 
     consdb_username: str = Field(
         "usdf",
         title="Consdb user for postgres database",
-        env="consdb_username",
+        validation_alias="consdb_username",
     )
 
     consdb_password: str = Field(
         "",
         title="Consdb password for postgres database",
-        env="consdb_password",
+        validation_alias="consdb_password",
     )
 
     consdb_schema: str = Field(
         "cdb_lsstcam",
         title="Schema for consdb postgres database",
-        env="consdb_schema",
+        validation_alias="consdb_schema",
     )
 
     kafka_schema_url: str = Field(
         "http://sasquatch-schema-registry.sasquatch:8081",
         title="Schemas for Kafka/Sasquatch",
-        env="SCHEMA_URL",
+        validation_alias="SCHEMA_URL",
     )
 
     kafka_bootstrap: str = Field(
         "sasquatch-kafka-bootstrap.sasquatch:9092",
         title="bootstrap url for sasquatch",
-        env="KAFKA_BOOTSTRAP",
+        validation_alias="KAFKA_BOOTSTRAP",
     )
 
     kafka_group_id: str = Field(
         "obsloctap-consumer",
         title="group id",
-        env="KAFKA_GROUP_ID",
+        validation_alias="KAFKA_GROUP_ID",
     )
 
     kafka_user: str = Field(
         "obsloctap",
         title="User for sasquatch ",
-        env="KAFKA_USERNAME",
+        validation_alias="KAFKA_USERNAME",
     )
 
     kafka_password: str = Field(
         "",
         title="password  for sasquatch user ",
-        env="KAFKA_PASSWORD",
+        validation_alias="KAFKA_PASSWORD",
     )
 
     salIndex: int = Field(
         1,
         title="Which predicted schedule messages to lookat ",
-        env="salIndex",
+        validation_alias="salIndex",
+    )
+
+    service_url: str = Field(
+        "https://usdf-rsp.slac.stanford.edu/obsloctap",
+        title="Base URL of the deployed obsloctap service",
+        validation_alias="service_url",
     )
 
 

@@ -10,7 +10,7 @@
 # license that can be found in the LICENSE file.
 
 """Copied from consdb -and perhaps they could be combined in the future"""
-
+import asyncio
 import io
 import json
 import math
@@ -162,11 +162,11 @@ def unpack_message(msg: ConsumerRecord) -> dict:
 
 
 async def process_message(msg: ConsumerRecord) -> None:
-    log.info(f"Processing kafka - {msg.key} {msg.timestamp} ")
     record = unpack_message(msg)
     if record["salIndex"] != config.salIndex:
         # log.debug(f"Skipping message - salIndex not {config.salIndex}")
         return
+    log.info(f"Processing kafka - {msg.key} {msg.timestamp} ")
     db: DbHelp = await DbHelpProvider.getHelper()
     if "nextVisit" in msg.topic:
         log.debug(record)
@@ -206,6 +206,9 @@ def get_consumer() -> aiokafka.AIOKafkaConsumer:
 
 async def consume() -> None:
     try:
+        sec = 20
+        log.info(f"Consume waiting a {sec} seconds   ")
+        await asyncio.sleep(sec)
         log.info(f"Starting consumer for {topic} ")
         consumer = get_consumer()
         await consumer.start()

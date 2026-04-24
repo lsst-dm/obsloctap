@@ -121,5 +121,5 @@ class TestSchedule(unittest.IsolatedAsyncioTestCase):
 
         print(f"Sleeptime is {config.exp_sleeptime}")
         reps = 3
-        count = await do_exp_updates(reps)
+        count = await do_exp_updates(0, reps)
         self.assertEqual(count, reps, f"Should run {reps} times ")

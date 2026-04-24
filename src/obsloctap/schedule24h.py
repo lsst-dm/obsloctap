@@ -132,11 +132,9 @@ class Schedule24:
         config = Configuration()
         # config in hours - sleep is in seconds
         stime = config.sleeptime * 60 * 60
-        log.info("Starting 24hr schedule updates ")
         # at start up it would be good to let the Consdb update have time
         # but if testing .. just go
-        if stopafter == 0:
-            await asyncio.sleep(60)
+        log.info("Starting 24hr schedule updates ")
         # this will be true always unless we pass in a number which is for test
         while stopafter != self.count:
             slp = stime

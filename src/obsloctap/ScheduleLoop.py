@@ -16,7 +16,7 @@ import os
 
 import structlog
 
-from obsloctap.consdbhelp import do_exp_updates
+from obsloctap.consdbhelp import do_exp_updates, do_fillin
 from obsloctap.consumekafka import consume
 from obsloctap.schedule24h import Schedule24
 
@@ -36,11 +36,19 @@ sched24 = Schedule24()
 
 
 async def runall() -> None:
+    # first get Consdb since las time we got a schedule
+    # fillin can take a while so better not to do the other
+    # loops before it's done - it caused deadlock
+    try:
+        lastcdb = await do_fillin()
+    except Exception:
+        log.exception("Encountered an error in fillin")
+
     try:
         await asyncio.gather(
-            do_exp_updates(),
             sched24.do24hs(),
             consume(),
+            do_exp_updates(lastcdb),
         )
     except Exception:
         log.exception("Encountered an error in runall")

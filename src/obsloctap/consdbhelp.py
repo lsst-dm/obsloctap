@@ -16,6 +16,7 @@ __all__ = [
     "ConsDbHelpProvider",
     "EXPOSURE_FIELDS",
     "do_exp_updates",
+    "do_fillin",
 ]
 
 import asyncio
@@ -57,23 +58,16 @@ EXPOSURE_FIELDS = [
 log = structlog.getLogger(__name__)
 
 
-async def do_exp_updates(stopafter: int = 0) -> int:
-    """this will get the consdb entries for scheduled observations
-    it never exits .. but sleeps for a few minutes
-    returns the number of times the loop executed"""
-    config = Configuration()
-    db: DbHelp = await DbHelpProvider.getHelper()
-    # config hours - sleep is in seconds
-    stime = config.exp_sleeptime * 60
-    sleeptime = stime
-    log.info("Starting updates from consdb ")
-    count = 1  # not equal to default stopafter which is only for test
-    exec = 0
-    entries = 0
+async def do_fillin() -> float:
+    """Fill in exposures from ConsDB for any gap since last observed plan.
 
+    -------
+    float
+        The lastconsdb time (MJD) to use for subsequent updates
+    """
+    db: DbHelp = await DbHelpProvider.getHelper()
     now = Time.now().utc.to_value("mjd")
     lastconsdb = now
-    # look for the last update so NOT scheduled
     try:
         fillin = await db.find_oldest_plan(negate=True)
         if fillin == 0:
@@ -83,7 +77,6 @@ async def do_exp_updates(stopafter: int = 0) -> int:
             log.info(f"Did not find any observered plan going to {fillin}")
 
         cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
-        inserted = 0
         if fillin < now:
             exposures = await cdb.get_exposures_between(fillin, now)
             log.info(
@@ -99,6 +92,28 @@ async def do_exp_updates(stopafter: int = 0) -> int:
         lastconsdb = fillin
     except Exception:
         log.exception("exposure update error in fillin")
+    return lastconsdb
+
+
+async def do_exp_updates(lastconsdb: float, stopafter: int = 0) -> int:
+    """this will get the consdb entries for scheduled observations
+    it never exits .. but sleeps for a few minutes
+    returns the number of times the loop executed"""
+    config = Configuration()
+    db: DbHelp = await DbHelpProvider.getHelper()
+    # config hours - sleep is in seconds
+    stime = config.exp_sleeptime * 60
+    sleeptime = stime
+    log.info("Starting updates from consdb ")
+    count = 1  # not equal to default stopafter which is only for test
+    exec = 0
+    entries = 0
+
+    sec = 20
+    if stopafter == 0:
+        log.info(f"Exposure(ConsD) update waiting {sec}s for other updates ")
+        await asyncio.sleep(sec)
+
     # this will be true always unless we pass in a number which is for test
     while stopafter != count:
         count += 1
@@ -183,8 +198,8 @@ class ConsDbHelp:
         )
         log.debug(f"Get exposures with {statement}")
         rows: Sequence[Row] = []
+        session = self.get_session()
         try:
-            session = self.get_session()
             result = await session.execute(text(statement))
             rows = result.all()
         except Exception as e:

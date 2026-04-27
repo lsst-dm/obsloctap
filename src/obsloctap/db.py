@@ -314,6 +314,7 @@ class DbHelp:
         inserted = 0
         ave_match = 0
         max_match = 0
+        id_match = 0
         now: float = Time.now().utc.to_value("mjd")
         try:
             for count, exp in enumerate(exposures, start=1):
@@ -328,11 +329,13 @@ class DbHelp:
                     idmatch = await self.find_by_obs_id(
                         exp.exposure_id, now, session_look
                     )
+                    id_match += 1
                 if len(idmatch) > 0:
                     # update execution_status to 'Performed' etc
                     if await self.update_one(exp, idmatch[0], session):
                         updated += 1
                         done = True
+                        id_match += 1
                     else:
                         log.error(
                             f"Failed to update exp: {exp.exposure_id} - "
@@ -374,8 +377,9 @@ class DbHelp:
                 if count % 500 == 0:
                     log.info(
                         f"Updated {updated}, unmatched {unmatched}, "
-                        f"inserted {inserted} of {len(exposures)}. "
-                        f"Average matches:{ave_match}, max:{max_match}"
+                        f"inserted {inserted} of {len(exposures)} exposures. "
+                        f"Match by id:{id_match}. "
+                        f"Lookup average matches:{ave_match}, max:{max_match}."
                     )
 
             if close_sessions:
@@ -728,7 +732,7 @@ class DbHelp:
             f" where t_planning > 0 and execution_status {comp} '{status}' "
             f" order by t_planning {sense} limit 1 "
         )
-        log.debug(statement)
+        log.debug(f"oldest(neg:{negate}:{statement}")
         try:
             res = await session.execute(text(statement))
             val = res.fetchone()

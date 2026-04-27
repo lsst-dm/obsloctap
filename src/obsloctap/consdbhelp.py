@@ -122,30 +122,36 @@ async def do_exp_updates(lastconsdb: float, stopafter: int = 0) -> int:
             # oldest scheduled job if it should have happened ..
             sched = await db.find_oldest_plan()
             now = Time.now().utc.to_value("mjd")
-            if sched < now:  # we may have something to do it is in the past
+            log.debug(
+                f"Oldest plan (sched):{sched}, now:{now}, "
+                f"lastconsdb{lastconsdb}."
+            )
+            # there may be no scheduled item
+            if (
+                0 < sched < now
+            ):  # we may have something to do it is in the past
                 cdb = await ConsDbHelpProvider.getHelper()
                 # just go back to last condb entry we got if its earlier
                 prior = min(sched, lastconsdb)
                 exposures = await cdb.get_exposures_between(prior, now)
                 if exposures:
-                    lastconsdb = exposures[0].obs_start_mjd
+                    lastconsdb = exposures[-1].obs_start_mjd
                 updated, inserted = await db.update_insert_exposures(exposures)
                 entries += updated
                 exec += 1
                 sleeptime = stime
-            else:  # it is in the future
+            if sched > 0:  # it is in the future so wait a while
                 sleeptime = round(sched - now, 1) * 86400
                 log.debug(
                     f"Oldest scheduled obs MJD is {sched} it is now {now}, "
                     f"exposure update will sleep {sleeptime} "
                 )
-            if count % 10 == 0:
-                log.info(
-                    f"Update exposures {count} runs "
-                    f"executed {exec} updates."
-                    f"Updated {entries} total planning lines"
-                    f"Sleeping {sleeptime}s"
-                )
+            log.info(
+                f"Update exposures {count} runs "
+                f"executed {exec} updates."
+                f"Updated {entries} total planning lines"
+                f"Sleeping {sleeptime}s, lastconsdb:{lastconsdb}"
+            )
             # anything not now performed is aborted
             await db.mark_aborted_older(now)
             # if we  have a scheduled observation could sleep until then.

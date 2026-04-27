@@ -86,12 +86,13 @@ async def do_fillin() -> float:
             # was only inserting but should really do match
             updated, inserted = await db.update_insert_exposures(exposures)
             if exposures:
+                # final most recent if this is sorted ASC
                 lastconsdb = exposures[-1].obs_start_mjd
         else:
             log.info(f" Last plan {fillin} is in the future now: {now} ")
-        lastconsdb = fillin
     except Exception:
         log.exception("exposure update error in fillin")
+    log.info(f"Consdb fillin done lastconsdb:{lastconsdb} ")
     return lastconsdb
 
 
@@ -194,7 +195,7 @@ class ConsDbHelp:
             f'SELECT {self.fields} FROM {self.schema}"exposure" '
             f"WHERE obs_start_mjd >= {start} AND obs_start_mjd <= {end} "
             f"and can_see_sky = True "
-            f"ORDER BY obs_start_mjd"
+            f"ORDER BY obs_start_mjd ASC"
         )
         log.debug(f"Get exposures with {statement}")
         rows: Sequence[Row] = []

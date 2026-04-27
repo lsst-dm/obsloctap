@@ -222,16 +222,19 @@ class DbHelp:
     async def find_by_obs_id(
         self,
         obs_id: str,
+        not_before_mjd: float,
         session: AsyncSession | None = None,
     ) -> Sequence[Row[tuple[Any]]]:
-        """Look for matching plan entires based on obs_id"""
+        """Look for matching plan entires based on obs_id
+        use the time just as a precaution"""
         close_session = False
         if session is None:
             session = AsyncSession(self.engine)
             close_session = True
         stmt = (
             f'SELECT * FROM {self.schema}"{Obsplan.__tablename__}" '
-            f"WHERE obs_id = '{obs_id}'"
+            f"WHERE obs_id = '{obs_id}' and "
+            f"t_planning < {not_before_mjd}"
         )
         try:
             result = await session.execute(text(stmt))
@@ -243,6 +246,7 @@ class DbHelp:
 
     async def find_entries(
         self,
+        not_after: float,
         ra: float,
         dec: float,
         obs_start_mjd: float,
@@ -250,7 +254,8 @@ class DbHelp:
         tol: float = 3.0,
         timetol: TimeDelta = min20,
     ) -> Sequence[Row[tuple[Any]]]:
-        """Look for matching plan entires based on position and rough time"""
+        """Look for matching plan entires based on position and rough time
+        should be Scheduled"""
 
         # Convert TimeDelta to MJD value (in days)
         timetol_mjd = timetol.to_value("jd")
@@ -260,7 +265,9 @@ class DbHelp:
             f"WHERE ABS(s_ra - {ra}) < {tol} "
             f"AND ABS(s_dec - {dec}) < {tol} "
             f"AND t_min <= {obs_start_mjd + timetol_mjd} AND "
-            f"t_max >= {obs_start_mjd - timetol_mjd}"
+            f"t_max >= {obs_start_mjd - timetol_mjd} AND "
+            f"execution_status = 'Scheduled' AND "
+            f"t_planning < {not_after}"
         )
         result = await session.execute(text(stmt))
         matches = result.fetchall()
@@ -305,16 +312,21 @@ class DbHelp:
         updated = 0
         unmatched = 0
         inserted = 0
+        ave_match = 0
+        max_match = 0
+        now: float = Time.now().utc.to_value("mjd")
         try:
-            for exp in exposures:
+            for count, exp in enumerate(exposures, start=1):
                 # Find matching obsplan entries
                 done = False
                 # simple case obs_id matches group_id
-                idmatch = await self.find_by_obs_id(exp.group_id, session_look)
+                idmatch = await self.find_by_obs_id(
+                    exp.group_id, now, session_look
+                )
                 if len(idmatch) == 0:
                     # obs_id matches exposure_id
                     idmatch = await self.find_by_obs_id(
-                        exp.exposure_id, session_look
+                        exp.exposure_id, now, session_look
                     )
                 if len(idmatch) > 0:
                     # update execution_status to 'Performed' etc
@@ -329,6 +341,7 @@ class DbHelp:
 
                 if not done:
                     matches = await self.find_entries(
+                        now,
                         exp.s_ra,
                         exp.s_dec,
                         exp.obs_start_mjd,
@@ -336,6 +349,10 @@ class DbHelp:
                         tol,
                         timetol,
                     )
+                    cm = len(matches)
+                    ave_match = int(((count - 1) * ave_match + cm) / count)
+                    if cm > max_match:
+                        max_match = cm
                     for match in matches:
                         if match.execution_status != "Performed":
                             # Found a match that is not yet performed
@@ -354,6 +371,12 @@ class DbHelp:
                     unmatched += 1
                     if await self.insert_exposure(exp, session):
                         inserted += 1
+                if count % 500 == 0:
+                    log.info(
+                        f"Updated {updated}, unmatched {unmatched}, "
+                        f"inserted {inserted} of {len(exposures)}. "
+                        f"Average matches:{ave_match}, max:{max_match}"
+                    )
 
             if close_sessions:
                 await session.commit()
@@ -483,11 +506,19 @@ class DbHelp:
 
         async with self._write_lock:
             session = AsyncSession(self.engine)
+
+            now = Time.now().utc.to_value("mjd")
             try:
                 # next visit can be any time
                 # but 20min seems plenty (PP use 15min)
                 matches = await self.find_entries(
-                    obs.s_ra, obs.s_dec, obs.t_planning, session, 1.0, min20
+                    now,
+                    obs.s_ra,
+                    obs.s_dec,
+                    obs.t_planning,
+                    session,
+                    1.0,
+                    min20,
                 )
                 log.debug(
                     f"update_insert_nextVisit: got  {len(matches)} matches"
@@ -598,9 +629,9 @@ class DbHelp:
                     f"where t_planning > {now} "
                     f"and execution_status in ('{sched}', '{abort}') "
                 )
-                log.debug(f"remove_old2: {stmt}")
                 res = await session.execute(text(stmt))
                 count += res.rowcount or 0
+                log.debug(f"remove_old2({count}): {stmt}")
 
                 await session.commit()
                 return count
@@ -682,17 +713,20 @@ class DbHelp:
         """Look for entries with t_planning  in the past and it is still
         status(default scheduled may never be anything else),
         do the opposite query if negate is true (not shceduled)
+        and take the most recent of them
 
         """
         comp = "="
+        sense = "ASC"
         if negate:
             comp = "<>"
+            sense = "DESC"
         session = AsyncSession(self.engine)
         statement = (
             f"select t_planning as t from "
             f'{self.schema}"{Obsplan.__tablename__}"'
             f" where t_planning > 0 and execution_status {comp} '{status}' "
-            f" order by t_planning ASC limit 1 "
+            f" order by t_planning {sense} limit 1 "
         )
         log.debug(statement)
         try:
@@ -714,7 +748,8 @@ class DbHelp:
                 stmt = (
                     f'update {self.schema}"{Obsplan.__tablename__}"'
                     f" set execution_status = 'Aborted' "
-                    f" where t_planning < {time}"
+                    f" where t_planning < {time} and"
+                    f" execution_status = 'Scheduled' "
                 )
                 res = await session.execute(text(stmt))
                 await session.commit()

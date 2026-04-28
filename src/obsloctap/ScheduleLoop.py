@@ -12,26 +12,20 @@
 
 import asyncio
 import logging
-import os
 
 import structlog
 from astropy.time import Time
 
+from obsloctap.config import config
 from obsloctap.consdbhelp import do_exp_updates
 from obsloctap.consumekafka import consume
 from obsloctap.schedule24h import Schedule24
 
 # Configure logging
-
-level = logging.DEBUG
-if "LOG_LEVEL" in os.environ:
-    # Get the log level string from environment
-    log_level_str = os.environ.get("LOG_LEVEL", "DEGUB").upper()
-    # Convert string to logging level (e.g., "DEBUG" -> logging.DEBUG)
-    level = getattr(logging, log_level_str, logging.INFO)
+level = getattr(logging, config.log_level.name, logging.INFO)
 structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(level))
 log = structlog.getLogger(__name__)
-log.info(f" Log level {level}")
+log.info(f"Log level {config.log_level.name}, {config.log_level}")
 
 sched24 = Schedule24()
 

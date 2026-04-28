@@ -794,11 +794,14 @@ class DbHelp:
 
     async def db_cleanup(self) -> None:
         """call vacuum - do it periodically after deletes.
-        Note: VACUUM requires autocommit mode, skip for SQLite in tests."""
+        Note: VACUUM requires autocommit mode, not a transaction."""
         if self.engine is None or "sqlite" in self.engine.url.drivername:
             return  # SQLite VACUUM can't run in transaction
-        stmt = f'VACUUM "{Obsplan.__tablename__}"'
-        await self.exec_commit(stmt)
+        # VACUUM must run outside a transaction - use raw connection
+        stmt = f'VACUUM {self.schema}"{Obsplan.__tablename__}"'
+        async with self.engine.connect() as conn:
+            await conn.execution_options(isolation_level="AUTOCOMMIT")
+            await conn.execute(text(stmt))
 
     async def tidyup(self, t: float) -> None:
         stmt = (

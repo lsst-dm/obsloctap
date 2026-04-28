@@ -118,28 +118,40 @@ async def get_skymap(
     logger: BoundLogger = Depends(logger_dependency),
 ) -> HTMLResponse:
     logger.info(f"Skymap requested for time: {time}, start {start}")
-    dbhelp = await DbHelpProvider.getHelper()
-    if start and start.lower() != "now":
-        t = Time.now() - TimeDelta("1440min")
-        success = False
-        try:
-            t = Time(start, format="iso", scale="utc")
-            success = True
-        except Exception:
-            pass
-        try:
-            t = Time(float(start), format="mjd")
-            success = True
-        except Exception:
-            pass
-        logger.info(f"Converted time: {success} - Using start time: {t}")
-        schedule = await dbhelp.get_schedule(time, start=t)
-    else:
-        schedule = await dbhelp.get_schedule(time)
-    html = make_sky_html(
-        schedule,
-        start_val=start,
-        time_val=time,
-        path_prefix=config.path_prefix,
-    )
-    return HTMLResponse(content=html)
+    try:
+        dbhelp = await DbHelpProvider.getHelper()
+        if start and start.lower() != "now":
+            t = Time.now() - TimeDelta("1440min")
+            success = False
+            try:
+                t = Time(start, format="iso", scale="utc")
+                success = True
+            except Exception:
+                pass
+            try:
+                t = Time(float(start), format="mjd")
+                success = True
+            except Exception:
+                pass
+            logger.info(f"Converted time: {success} - Using start time: {t}")
+            schedule = await dbhelp.get_schedule(time, start=t)
+        else:
+            schedule = await dbhelp.get_schedule(time)
+        html = make_sky_html(
+            schedule,
+            start_val=start,
+            time_val=time,
+            path_prefix=config.path_prefix,
+        )
+        return HTMLResponse(content=html)
+    except Exception as e:
+        logger.error(f"Error generating skymap: {e}")
+        error_html = (
+            "<!DOCTYPE html><html><head><title>Error</title></head><body>"
+            "<h1>Error loading skymap</h1>"
+            "<p>Unable to generate the sky map. Please try again later.</p>"
+            f"<p><strong>Details: </strong> {e}</p>"
+            f'<p><a href="{config.path_prefix}/skymap">Retry</a></p>'
+            "</body></html>"
+        )
+        return HTMLResponse(content=error_html, status_code=500)

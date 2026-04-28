@@ -31,6 +31,7 @@ from obsloctap.models import Obsplan, spectral_ranges
 
 # Configure logging
 log = structlog.getLogger(__name__)
+
 jaas = ("org.apache.kafka.common.security.scram.ScramLoginModule required",)
 
 # need schedule updates
@@ -166,13 +167,12 @@ async def process_message(msg: ConsumerRecord) -> None:
     if record["salIndex"] != config.salIndex:
         # log.debug(f"Skipping message - salIndex not {config.salIndex}")
         return
-    log.info(f"Processing kafka - {msg.key} {msg.timestamp} ")
     db: DbHelp = await DbHelpProvider.getHelper()
     if "nextVisit" in msg.topic:
-        log.debug(record)
         obs = convert_nextVisit(record)
         # nextVisit is published for all sorts not just on sky ..
         if obs.s_ra != 0 and obs.s_dec != 0:
+            log.debug(record)
             await db.update_insert_nextVisit(obs)
     else:
         plan = convert_predicted_kafka(record)

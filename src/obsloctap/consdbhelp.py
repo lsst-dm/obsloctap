@@ -16,14 +16,13 @@ __all__ = [
     "ConsDbHelpProvider",
     "EXPOSURE_FIELDS",
     "do_exp_updates",
-    "do_fillin",
 ]
 
 import asyncio
 from typing import Any, Sequence
 
 import structlog
-from astropy.time import Time, TimeDelta
+from astropy.time import Time
 from pydantic import ValidationError
 from sqlalchemy import Row, text
 from sqlalchemy.ext.asyncio import (
@@ -58,47 +57,10 @@ EXPOSURE_FIELDS = [
 log = structlog.getLogger(__name__)
 
 
-async def do_fillin() -> float:
-    """Fill in exposures from ConsDB for any gap since last observed plan.
-
-    -------
-    float
-        The lastconsdb time (MJD) to use for subsequent updates
-    """
-    db: DbHelp = await DbHelpProvider.getHelper()
-    now = Time.now().utc.to_value("mjd")
-    lastconsdb = now
-    try:
-        fillin = await db.find_oldest_plan(negate=True)
-        if fillin == 0:
-            # go back 24 hours anyway
-            h24 = TimeDelta("24hr")
-            fillin = (now - h24).to_value("mjd")
-            log.info(f"Did not find any observered plan going to {fillin}")
-
-        cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
-        if fillin < now:
-            exposures = await cdb.get_exposures_between(fillin, now)
-            log.info(
-                f"Doing consdb fillin from {fillin} to {now} -"
-                f" got {len(exposures)} "
-            )
-            # was only inserting but should really do match
-            updated, inserted = await db.update_insert_exposures(exposures)
-            if exposures:
-                # final most recent if this is sorted ASC
-                lastconsdb = exposures[-1].obs_start_mjd
-        else:
-            log.info(f" Last plan {fillin} is in the future now: {now} ")
-    except Exception:
-        log.exception("exposure update error in fillin")
-    log.info(f"Consdb fillin done lastconsdb:{lastconsdb} ")
-    return lastconsdb
-
-
 async def do_exp_updates(lastconsdb: float, stopafter: int = 0) -> int:
     """this will get the consdb entries for scheduled observations
-    it never exits .. but sleeps for a few minutes
+    it never exits if stop after is 0
+    but sleeps for a few minutes after each iteration
     returns the number of times the loop executed"""
     config = Configuration()
     db: DbHelp = await DbHelpProvider.getHelper()
@@ -124,9 +86,12 @@ async def do_exp_updates(lastconsdb: float, stopafter: int = 0) -> int:
             now = Time.now().utc.to_value("mjd")
             log.debug(
                 f"Oldest plan (sched):{sched}, now:{now}, "
-                f"lastconsdb{lastconsdb}."
+                f"lastconsdb:{lastconsdb}."
             )
             # there may be no scheduled item
+            if sched == 0:
+                # go get the last performed/aborted plan element
+                sched = await db.find_oldest_plan(negate=True)
             if (
                 0 < sched < now
             ):  # we may have something to do it is in the past
@@ -140,7 +105,7 @@ async def do_exp_updates(lastconsdb: float, stopafter: int = 0) -> int:
                 entries += updated
                 exec += 1
                 sleeptime = stime
-            if sched > 0:  # it is in the future so wait a while
+            if sched > now:  # it is in the future so wait that long
                 sleeptime = round(sched - now, 1) * 86400
                 log.debug(
                     f"Oldest scheduled obs MJD is {sched} it is now {now}, "

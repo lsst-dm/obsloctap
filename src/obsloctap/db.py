@@ -575,8 +575,8 @@ class DbHelp:
             f"obs_id = '{exp.exposure_id}', "
             f"target_name = '{exp.target_name}', "
             f"obs_collection = '{exp.science_program}| {exp.scheduler_note}', "
-            f"em_min = '{spectral_ranges[exp.band][0]}', "
-            f"em_max = '{spectral_ranges[exp.band][1]}', "
+            f"em_min = '{spectral_ranges[exp.band.lower()][0]}', "
+            f"em_max = '{spectral_ranges[exp.band.lower()][1]}', "
             f"t_min = {exp.obs_start_mjd}, "
             f"t_max = {exp.obs_end_mjd}, "
             f"rubin_rot_sky_pos = {exp.sky_rotation} "
@@ -732,7 +732,7 @@ class DbHelp:
             f" where t_planning > 0 and execution_status {comp} '{status}' "
             f" order by t_planning {sense} limit 1 "
         )
-        log.debug(f"oldest(neg:{negate}:{statement}")
+        log.debug(f"oldest(neg:{negate}):{statement}")
         try:
             res = await session.execute(text(statement))
             val = res.fetchone()

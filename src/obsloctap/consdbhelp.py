@@ -22,7 +22,7 @@ import asyncio
 from typing import Any, Sequence
 
 import structlog
-from astropy.time import Time, TimeDelta
+from astropy.time import Time
 from pydantic import ValidationError
 from sqlalchemy import Row, text
 from sqlalchemy.ext.asyncio import (
@@ -57,9 +57,10 @@ EXPOSURE_FIELDS = [
 log = structlog.getLogger(__name__)
 
 
-async def do_exp_updates(stopafter: int = 0) -> int:
+async def do_exp_updates(lastconsdb: float, stopafter: int = 0) -> int:
     """this will get the consdb entries for scheduled observations
-    it never exits .. but sleeps for a few minutes
+    it never exits if stop after is 0
+    but sleeps for a few minutes after each iteration
     returns the number of times the loop executed"""
     config = Configuration()
     db: DbHelp = await DbHelpProvider.getHelper()
@@ -71,67 +72,53 @@ async def do_exp_updates(stopafter: int = 0) -> int:
     exec = 0
     entries = 0
 
-    now = Time.now().to_value("mjd")
-    lastconsdb = now
-    # look for the last update so NOT scheduled
-    try:
-        fillin = await db.find_oldest_plan(negate=True)
-        if fillin == 0:
-            # go back 24 hours anyway
-            h24 = TimeDelta("24hr")
-            fillin = (Time.now() - h24).to_value("mjd")
-            log.info(f"Did not find any observered plan going to {fillin}")
+    sec = 20
+    if stopafter == 0:
+        log.info(f"Exposure(ConsD) update waiting {sec}s for other updates ")
+        await asyncio.sleep(sec)
 
-        cdb: ConsDbHelp = await ConsDbHelpProvider.getHelper()
-        inserted = 0
-        if fillin < now:
-            exposures = await cdb.get_exposures_between(fillin, now)
-            log.info(
-                f"Doing consdb fillin from {fillin} to {now} -"
-                f" got {len(exposures)} "
-            )
-            # was only inserting but should really do match
-            updated, inserted = await db.update_insert_exposures(exposures)
-            if exposures:
-                lastconsdb = exposures[-1].obs_start_mjd
-        else:
-            log.info(f" Last plan {fillin} is in the future now: {now} ")
-        lastconsdb = fillin
-    except Exception:
-        log.exception("exposure update error in fillin")
     # this will be true always unless we pass in a number which is for test
     while stopafter != count:
         count += 1
         try:
             # oldest scheduled job if it should have happened ..
             sched = await db.find_oldest_plan()
-            now = Time.now().to_value("mjd")
-            if sched < now:  # we may have something to do it is in the past
+            now = Time.now().utc.to_value("mjd")
+            log.debug(
+                f"Oldest plan (sched):{sched}, now:{now}, "
+                f"lastconsdb:{lastconsdb}."
+            )
+            # there may be no scheduled item
+            if sched == 0:
+                # go get the last performed/aborted plan element
+                sched = await db.find_oldest_plan(negate=True)
+            if (
+                0 < sched < now
+            ):  # we may have something to do it is in the past
                 cdb = await ConsDbHelpProvider.getHelper()
                 # just go back to last condb entry we got if its earlier
                 prior = min(sched, lastconsdb)
                 exposures = await cdb.get_exposures_between(prior, now)
                 if exposures:
-                    lastconsdb = exposures[0].obs_start_mjd
+                    lastconsdb = exposures[-1].obs_start_mjd
                 updated, inserted = await db.update_insert_exposures(exposures)
                 entries += updated
                 exec += 1
                 sleeptime = stime
-            else:  # it is in the future
+            if sched > now:  # it is in the future so wait that long
                 sleeptime = round(sched - now, 1) * 86400
                 log.debug(
                     f"Oldest scheduled obs MJD is {sched} it is now {now}, "
                     f"exposure update will sleep {sleeptime} "
                 )
-            if count % 10 == 0:
-                log.info(
-                    f"Update exposures {count} runs "
-                    f"executed {exec} updates."
-                    f"Updated {entries} total planning lines"
-                    f"Sleeping {sleeptime}s"
-                )
+            log.info(
+                f"Update exposures {count} runs "
+                f"executed {exec} updates."
+                f"Updated {entries} total planning lines"
+                f"Sleeping {sleeptime}s, lastconsdb:{lastconsdb}"
+            )
             # anything not now performed is aborted
-            db.mark_aborted_older(now)
+            await db.mark_aborted_older(now)
             # if we  have a scheduled observation could sleep until then.
             await asyncio.sleep(sleeptime)
         except Exception:
@@ -179,12 +166,12 @@ class ConsDbHelp:
             f'SELECT {self.fields} FROM {self.schema}"exposure" '
             f"WHERE obs_start_mjd >= {start} AND obs_start_mjd <= {end} "
             f"and can_see_sky = True "
-            f"ORDER BY obs_start_mjd"
+            f"ORDER BY obs_start_mjd ASC"
         )
         log.debug(f"Get exposures with {statement}")
         rows: Sequence[Row] = []
+        session = self.get_session()
         try:
-            session = self.get_session()
             result = await session.execute(text(statement))
             rows = result.all()
         except Exception as e:

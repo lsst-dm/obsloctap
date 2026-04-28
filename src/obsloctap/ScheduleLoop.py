@@ -15,6 +15,7 @@ import logging
 import os
 
 import structlog
+from astropy.time import Time
 
 from obsloctap.consdbhelp import do_exp_updates
 from obsloctap.consumekafka import consume
@@ -36,11 +37,22 @@ sched24 = Schedule24()
 
 
 async def runall() -> None:
+    # first get Consdb since last time we got a schedule
+    # fillin can take a while so better not to do the other
+    # loops before it's done - it caused deadlock
+    lastcdb = Time.now().utc.to_value("mjd")
     try:
+        log.info("Doign consdb fillin")
+        await do_exp_updates(0, 1)
+    except Exception:
+        log.exception("Encountered an error in fillin")
+    # ok now the normal loop
+    try:
+        log.info("Gathering threads ")
         await asyncio.gather(
-            do_exp_updates(),
             sched24.do24hs(),
             consume(),
+            do_exp_updates(lastcdb),
         )
     except Exception:
         log.exception("Encountered an error in runall")

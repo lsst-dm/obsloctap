@@ -13,6 +13,7 @@
 
 __all__ = ["DbHelp", "DbHelpProvider", "OBSPLAN_FIELDS"]
 
+import asyncio
 import os
 from io import StringIO
 from typing import Any, Sequence
@@ -85,6 +86,7 @@ class DbHelp:
         self.engine = engine
         self.schema = ""
         self.insert_fields = ",".join(OBSPLAN_FIELDS)
+        self._write_lock: asyncio.Lock = asyncio.Lock()
 
     def get_session(self) -> AsyncSession:
         return AsyncSession(self.engine)
@@ -109,8 +111,8 @@ class DbHelp:
         self, time: float = 0, start: Time | None = None
     ) -> list[Obsplan]:
         """Return the latest schedule item from the DB.
-         time is a number of hours from start for how much schedule to return
-         if no start is provided now in UTC is assumed
+        time is a number of hours from start for how much schedule to return
+        if no start is provided now in UTC is assumed
         if time is zero we just take top obsplanLimit(1000) rows."""
 
         config = Configuration()
@@ -119,7 +121,7 @@ class DbHelp:
         limitclause = f" limit  {config.obsplanLimit}"
 
         if time != 0:
-            now = start if start else Time.now()
+            now = start if start else Time.now().utc
             startmjd = now.to_value("mjd")
             td = TimeDelta(time * u.hr)
             win = now + td
@@ -179,54 +181,72 @@ class DbHelp:
         This version avoids creating duplicate entries by checking for an
         existing row with the same t_planning before inserting.
         """
-        session = AsyncSession(self.engine)
-        inserted = 0
-        skipped = 0
-        for observation in observations:
-            # check for existing entry with same t_planning
-            check_stmt = (
-                f'select 1 from {self.schema}"{Obsplan.__tablename__}" '
-                f"where ABS(t_planning - {observation.t_planning}) < 1e-6 "
-                f"limit 1"
+        async with self._write_lock:
+            session = AsyncSession(self.engine)
+            inserted = 0
+            skipped = 0
+            log.info(f"Insert Obsplan with {len(observations)}")
+            try:
+                for observation in observations:
+                    # check for existing entry with same t_planning
+                    check_stmt = (
+                        f"select 1 from "
+                        f'{self.schema}"{Obsplan.__tablename__}" '
+                        f"where "
+                        f"ABS(t_planning - {observation.t_planning}) < 1e-6 "
+                        f"limit 1"
+                    )
+                    result = await session.execute(text(check_stmt))
+                    exists = result.fetchone()
+                    if exists:
+                        skipped += 1
+                        continue
+                    ok = await self.insert_obs(observation, session)
+                    if ok:
+                        inserted += 1
+                    else:
+                        log.error(
+                            f"Failed ot insert {observation.t_planning}, "
+                            f"{observation.obs_id}."
+                        )
+                if inserted > 0:
+                    await session.commit()
+            finally:
+                await session.close()
+            log.info(
+                f"Inserted and commited {inserted} Observations"
+                f", Skipped {skipped}."
             )
-            result = await session.execute(text(check_stmt))
-            exists = result.fetchone()
-            if exists:
-                skipped += 1
-                continue
-            await self.insert_obs(observation, session)
-            inserted += 1
-        if inserted > 0:
-            await session.commit()
-        await session.close()
-        log.info(
-            f"Inserted and commited {inserted} Observations"
-            f", Skipped {skipped}."
-        )
-        return inserted
+            return inserted
 
     async def find_by_obs_id(
         self,
         obs_id: str,
+        not_before_mjd: float,
         session: AsyncSession | None = None,
     ) -> Sequence[Row[tuple[Any]]]:
-        """Look for matching plan entires based on obs_id"""
+        """Look for matching plan entires based on obs_id
+        use the time just as a precaution"""
         close_session = False
         if session is None:
             session = AsyncSession(self.engine)
             close_session = True
         stmt = (
             f'SELECT * FROM {self.schema}"{Obsplan.__tablename__}" '
-            f"WHERE obs_id = '{obs_id}'"
+            f"WHERE obs_id = '{obs_id}' and "
+            f"t_planning < {not_before_mjd}"
         )
-        result = await session.execute(text(stmt))
-        matches = result.fetchall()
-        if close_session:
-            await session.close()
-        return matches
+        try:
+            result = await session.execute(text(stmt))
+            matches = result.fetchall()
+            return matches
+        finally:
+            if close_session:
+                await session.close()
 
     async def find_entries(
         self,
+        not_after: float,
         ra: float,
         dec: float,
         obs_start_mjd: float,
@@ -234,7 +254,8 @@ class DbHelp:
         tol: float = 3.0,
         timetol: TimeDelta = min20,
     ) -> Sequence[Row[tuple[Any]]]:
-        """Look for matching plan entires based on position and rough time"""
+        """Look for matching plan entires based on position and rough time
+        should be Scheduled"""
 
         # Convert TimeDelta to MJD value (in days)
         timetol_mjd = timetol.to_value("jd")
@@ -244,7 +265,9 @@ class DbHelp:
             f"WHERE ABS(s_ra - {ra}) < {tol} "
             f"AND ABS(s_dec - {dec}) < {tol} "
             f"AND t_min <= {obs_start_mjd + timetol_mjd} AND "
-            f"t_max >= {obs_start_mjd - timetol_mjd}"
+            f"t_max >= {obs_start_mjd - timetol_mjd} AND "
+            f"execution_status = 'Scheduled' AND "
+            f"t_planning < {not_after}"
         )
         result = await session.execute(text(stmt))
         matches = result.fetchall()
@@ -264,7 +287,19 @@ class DbHelp:
         Check it is not 'performed' if it is onlyupdate if same id.
         Returns the number of updated and inserted entries in a tupple.
         """
+        async with self._write_lock:
+            return await self._update_insert_exposures(
+                exposures, tol, timetol, session_touse
+            )
 
+    async def _update_insert_exposures(
+        self,
+        exposures: list[Exposure],
+        tol: float = 0.01,
+        timetol: TimeDelta = sec30,
+        session_touse: AsyncSession = None,
+    ) -> tuple[int, int]:
+        close_sessions = False
         if session_touse:
             # for test this seems to need one session
             session = session_touse
@@ -273,61 +308,86 @@ class DbHelp:
             # for real a single session deadlocks
             session = AsyncSession(self.engine)
             session_look = AsyncSession(self.engine)
+            close_sessions = True
         updated = 0
         unmatched = 0
         inserted = 0
-        for exp in exposures:
-            # Find matching obsplan entries
-            done = False
-            # simple case obs_id matches group_id
-            idmatch = await self.find_by_obs_id(exp.group_id, session_look)
-            if len(idmatch) == 0:
-                # obs_id matches exposure_id
+        ave_match = 0
+        max_match = 0
+        id_match = 0
+        now: float = Time.now().utc.to_value("mjd")
+        try:
+            for count, exp in enumerate(exposures, start=1):
+                # Find matching obsplan entries
+                done = False
+                # simple case obs_id matches group_id
                 idmatch = await self.find_by_obs_id(
-                    exp.exposure_id, session_look
+                    exp.group_id, now, session_look
                 )
-            if len(idmatch) > 0:
-                # update execution_status to 'Performed' etc
-                if await self.update_one(exp, idmatch[0], session):
-                    updated += 1
-                    done = True
-                else:
-                    log.error(
-                        f"Failed to update exp: {exp.exposure_id} - "
-                        f"obs: {idmatch[0].obs_id} "
+                if len(idmatch) == 0:
+                    # obs_id matches exposure_id
+                    idmatch = await self.find_by_obs_id(
+                        exp.exposure_id, now, session_look
+                    )
+                    id_match += 1
+                if len(idmatch) > 0:
+                    # update execution_status to 'Performed' etc
+                    if await self.update_one(exp, idmatch[0], session):
+                        updated += 1
+                        done = True
+                        id_match += 1
+                    else:
+                        log.error(
+                            f"Failed to update exp: {exp.exposure_id} - "
+                            f"obs: {idmatch[0].obs_id} "
+                        )
+
+                if not done:
+                    matches = await self.find_entries(
+                        now,
+                        exp.s_ra,
+                        exp.s_dec,
+                        exp.obs_start_mjd,
+                        session_look,
+                        tol,
+                        timetol,
+                    )
+                    cm = len(matches)
+                    ave_match = int(((count - 1) * ave_match + cm) / count)
+                    if cm > max_match:
+                        max_match = cm
+                    for match in matches:
+                        if match.execution_status != "Performed":
+                            # Found a match that is not yet performed
+                            if await self.update_one(exp, match, session):
+                                updated += 1
+                                done = True
+                            else:
+                                log.error(
+                                    f"Failed to update exp: "
+                                    f"{exp.exposure_id} - "
+                                    f"obs: {match.obs_id} "
+                                )
+                            break
+
+                if not done:
+                    unmatched += 1
+                    if await self.insert_exposure(exp, session):
+                        inserted += 1
+                if count % 500 == 0:
+                    log.info(
+                        f"Updated {updated}, unmatched {unmatched}, "
+                        f"inserted {inserted} of {len(exposures)} exposures. "
+                        f"Match by id:{id_match}. "
+                        f"Lookup average matches:{ave_match}, max:{max_match}."
                     )
 
-            if not done:
-                matches = await self.find_entries(
-                    exp.s_ra,
-                    exp.s_dec,
-                    exp.obs_start_mjd,
-                    session_look,
-                    tol,
-                    timetol,
-                )
-                for match in matches:
-                    if match.execution_status != "Performed":
-                        # Found a match that is not yet performed
-                        if await self.update_one(exp, match, session):
-                            updated += 1
-                            done = True
-                        else:
-                            log.error(
-                                f"Failed to update exp: {exp.exposure_id} - "
-                                f"obs: {match.obs_id} "
-                            )
-                        break
-
-            if not done:
-                unmatched += 1
-                if await self.insert_exposure(exp, session):
-                    inserted += 1
-
-        if not session_touse:
-            await session.commit()
-            await session.close()
-            await session_look.close()
+            if close_sessions:
+                await session.commit()
+        finally:
+            if close_sessions:
+                await session.close()
+                await session_look.close()
         log.info(
             f"Updated {updated}, unmatched {unmatched}, "
             f"inserted {inserted} of {len(exposures)}"
@@ -448,27 +508,41 @@ class DbHelp:
         0 for update and 1 for insert
         """
 
-        session = AsyncSession(self.engine)
-        # next visit can be any time but 20min seems plenty (PP use 15min)
-        matches = await self.find_entries(
-            obs.s_ra, obs.s_dec, obs.t_planning, session, 1.0, min20
-        )
-        log.debug(f"update_insert_nextVisit: got  {len(matches)} matches")
-        retval = 0
-        if len(matches) > 0:
-            plan = self.process(matches)[0]
-            t_planning = plan.t_planning
-            await self.update_planif(plan, obs)
-            #  we keep t_planning from the exisiting enty -
-            #  nextVisit has no time.
-            plan.t_planning = t_planning
-            await self.update_obsplan(plan, session)
-        else:
-            if await self.insert_obs(obs, session):
-                retval = 1
-        await session.commit()
-        await session.close()
-        return retval
+        async with self._write_lock:
+            session = AsyncSession(self.engine)
+
+            now = Time.now().utc.to_value("mjd")
+            try:
+                # next visit can be any time
+                # but 20min seems plenty (PP use 15min)
+                matches = await self.find_entries(
+                    now,
+                    obs.s_ra,
+                    obs.s_dec,
+                    obs.t_planning,
+                    session,
+                    1.0,
+                    min20,
+                )
+                log.debug(
+                    f"update_insert_nextVisit: got  {len(matches)} matches"
+                )
+                retval = 0
+                if len(matches) > 0:
+                    plan = self.process(matches)[0]
+                    t_planning = plan.t_planning
+                    await self.update_planif(plan, obs)
+                    #  we keep t_planning from the exisiting enty -
+                    #  nextVisit has no time.
+                    plan.t_planning = t_planning
+                    await self.update_obsplan(plan, session)
+                else:
+                    if await self.insert_obs(obs, session):
+                        retval = 1
+                await session.commit()
+                return retval
+            finally:
+                await session.close()
 
     async def update_obsplan(
         self, obs: Obsplan, session: AsyncSession
@@ -501,8 +575,8 @@ class DbHelp:
             f"obs_id = '{exp.exposure_id}', "
             f"target_name = '{exp.target_name}', "
             f"obs_collection = '{exp.science_program}| {exp.scheduler_note}', "
-            f"em_min = '{spectral_ranges[exp.band][0]}', "
-            f"em_max = '{spectral_ranges[exp.band][1]}', "
+            f"em_min = '{spectral_ranges[exp.band.lower()][0]}', "
+            f"em_max = '{spectral_ranges[exp.band.lower()][1]}', "
             f"t_min = {exp.obs_start_mjd}, "
             f"t_max = {exp.obs_end_mjd}, "
             f"rubin_rot_sky_pos = {exp.sky_rotation} "
@@ -512,8 +586,8 @@ class DbHelp:
         if session is None:
             s = self.get_session()
             res = await s.execute(text(update_stmt))
-            s.commit()
-            s.close()
+            await s.commit()
+            await s.close()
             ok = res.rowcount > 0
         else:
             res = await session.execute(text(update_stmt))
@@ -535,35 +609,38 @@ class DbHelp:
         if not observations:
             return 0
 
-        maxt = observations[0].t_max
-        mint = observations[-1].t_min
-        sched = "Scheduled"
-        abort = "Aborted"
+        async with self._write_lock:
+            maxt = observations[0].t_max
+            mint = observations[-1].t_min
+            sched = "Scheduled"
+            abort = "Aborted"
 
-        session = AsyncSession(self.engine)
-        stmt = (
-            f'delete from {self.schema}"{Obsplan.__tablename__}" '
-            f"where t_planning between {mint} and {maxt} "
-            f"and execution_status in ('{sched}', '{abort}') "
-        )
-        log.debug(f"remove_old: {stmt}")
-        res = await session.execute(text(stmt))
-        count = res.rowcount or 0
+            session = AsyncSession(self.engine)
+            try:
+                stmt = (
+                    f'delete from {self.schema}"{Obsplan.__tablename__}" '
+                    f"where t_planning between {mint} and {maxt} "
+                    f"and execution_status in ('{sched}', '{abort}') "
+                )
+                log.debug(f"remove_old: {stmt}")
+                res = await session.execute(text(stmt))
+                count = res.rowcount or 0
 
-        t: Time = Time.now()
-        now = t.to_value("mjd")
-        stmt = (
-            f'delete from {self.schema}"{Obsplan.__tablename__}" '
-            f"where t_planning > {now} "
-            f"and execution_status in ('{sched}', '{abort}') "
-        )
-        log.debug(f"remove_old2: {stmt}")
-        res = await session.execute(text(stmt))
-        count += res.rowcount or 0
+                t: Time = Time.now().utc
+                now = t.to_value("mjd")
+                stmt = (
+                    f'delete from {self.schema}"{Obsplan.__tablename__}" '
+                    f"where t_planning > {now} "
+                    f"and execution_status in ('{sched}', '{abort}') "
+                )
+                res = await session.execute(text(stmt))
+                count += res.rowcount or 0
+                log.debug(f"remove_old2({count}): {stmt}")
 
-        await session.commit()
-        await session.close()
-        return count
+                await session.commit()
+                return count
+            finally:
+                await session.close()
 
     async def remove_flag(
         self, observations: list[Obsplan], priority: int = 2
@@ -583,50 +660,56 @@ class DbHelp:
 
         if len(observations) == 0:
             return 0
-        # Observations are expected to be sorted descending
-        mint = observations[-1].t_planning
-        maxt = observations[0].t_planning
 
-        statement = (
-            f"select {self.insert_fields} from "
-            f'{self.schema}"{Obsplan.__tablename__}"'
-            f" where t_planning between {mint} and {maxt}"
-            f" order by t_planning DESC"
-        )
-        log.debug(f"remove_flag: {statement}")
-        session = AsyncSession(self.engine)
-        result = await session.execute(text(statement))
-        oldobs: list[Obsplan] = self.process(result.all())
-        await session.close()
+        async with self._write_lock:
+            # Observations are expected to be sorted descending
+            mint = observations[-1].t_planning
+            maxt = observations[0].t_planning
 
-        # Build a set of old t_planning values that get deleted/replaced
-        todelete: list[float] = []
-        tomark: list[float] = []
+            statement = (
+                f"select {self.insert_fields} from "
+                f'{self.schema}"{Obsplan.__tablename__}"'
+                f" where t_planning between {mint} and {maxt}"
+                f" order by t_planning DESC"
+            )
+            log.debug(f"remove_flag: {statement}")
+            session = AsyncSession(self.engine)
+            try:
+                result = await session.execute(text(statement))
+                oldobs: list[Obsplan] = self.process(result.all())
+            finally:
+                await session.close()
 
-        # For faster matching, create index by t_planning for new observations
-        new_by_window = []
-        for newobs in observations:
-            new_by_window.append((newobs.t_min, newobs.t_max, newobs.obs_id))
+            # Build a set of old t_planning values that get deleted/replaced
+            todelete: list[float] = []
+            tomark: list[float] = []
 
-        # For each old observation, see if it falls within any new obs window
-        for old in oldobs:
-            matched = False
-            for tmin, tmax, new_id in new_by_window:
-                if tmin <= old.t_planning <= tmax:
-                    matched = True
-                    # if the ids differ, the old should be deleted (replaced)
-                    if old.obs_id != new_id:
-                        todelete.append(old.t_planning)
-                    # if ids are same, keep the old (it matches)
-                    break
-            if not matched:
-                # not matched to any new window -> mark as Aborted
-                tomark.append(old.t_planning)
+            # For faster matching, create index by t_planning for new obs
+            new_by_window = []
+            for newobs in observations:
+                new_by_window.append(
+                    (newobs.t_min, newobs.t_max, newobs.obs_id)
+                )
 
-        # apply deletes and marks
-        await self.delete_obs(todelete)
-        await self.mark_not_observed(tomark)
-        return len(tomark or [])
+            # For each old observation, see if it falls within any new window
+            for old in oldobs:
+                matched = False
+                for tmin, tmax, new_id in new_by_window:
+                    if tmin <= old.t_planning <= tmax:
+                        matched = True
+                        # if the ids differ, the old should be deleted
+                        if old.obs_id != new_id:
+                            todelete.append(old.t_planning)
+                        # if ids are same, keep the old (it matches)
+                        break
+                if not matched:
+                    # not matched to any new window -> mark as Aborted
+                    tomark.append(old.t_planning)
+
+            # apply deletes and marks (inner helpers, no lock needed)
+            await self.delete_obs(todelete)
+            await self.mark_not_observed(tomark)
+            return len(tomark or [])
 
     async def find_oldest_plan(
         self, status: str = "Scheduled", negate: bool = False
@@ -634,42 +717,51 @@ class DbHelp:
         """Look for entries with t_planning  in the past and it is still
         status(default scheduled may never be anything else),
         do the opposite query if negate is true (not shceduled)
+        and take the most recent of them
 
         """
         comp = "="
+        sense = "ASC"
         if negate:
             comp = "<>"
+            sense = "DESC"
         session = AsyncSession(self.engine)
         statement = (
             f"select t_planning as t from "
             f'{self.schema}"{Obsplan.__tablename__}"'
             f" where t_planning > 0 and execution_status {comp} '{status}' "
-            f" order by t_planning ASC limit 1 "
+            f" order by t_planning {sense} limit 1 "
         )
-        log.debug(statement)
-        res = await session.execute(text(statement))
-        val = res.fetchone()
-        await session.close()
-        if val and val[0]:
-            return val[0]
-        else:
-            return 0
+        log.debug(f"oldest(neg:{negate}):{statement}")
+        try:
+            res = await session.execute(text(statement))
+            val = res.fetchone()
+            if val and val[0]:
+                return val[0]
+            else:
+                return 0
+        finally:
+            await session.close()
 
     async def mark_aborted_older(self, time: float) -> int:
         """Mark observations as aborted  before time (mjd).
         Returns number of rows updated."""
-        session = AsyncSession(self.engine)
-        stmt = (
-            f'update {self.schema}"{Obsplan.__tablename__}"'
-            f" set execution_status = 'Aborted' "
-            f" where t_planning < {time}"
-        )
-        res = await session.execute(text(stmt))
-        await session.commit()
-        await session.close()
-        count = res.rowcount
-        log.debug(f"marked aborted({count}): {stmt}")
-        return count
+        async with self._write_lock:
+            session = AsyncSession(self.engine)
+            try:
+                stmt = (
+                    f'update {self.schema}"{Obsplan.__tablename__}"'
+                    f" set execution_status = 'Aborted' "
+                    f" where t_planning < {time} and"
+                    f" execution_status = 'Scheduled' "
+                )
+                res = await session.execute(text(stmt))
+                await session.commit()
+                count = res.rowcount
+                log.debug(f"marked aborted({count}): {stmt}")
+                return count
+            finally:
+                await session.close()
 
     async def mark_not_observed(self, ts: list[float]) -> int:
         """Mark observations as aborted .
@@ -682,10 +774,12 @@ class DbHelp:
             f" set execution_status = 'Aborted' "
             f" where t_planning in ({','.join(str(t) for t in ts)})"
         )
-        log.debug(f"mark_obs: {stmt}")
-        res = await session.execute(text(stmt))
-        await session.commit()
-        await session.close()
+        try:
+            log.debug(f"mark_obs: {stmt}")
+            res = await session.execute(text(stmt))
+            await session.commit()
+        finally:
+            await session.close()
         return res.rowcount
 
     async def delete_obs(self, ts: list[float]) -> None:
@@ -697,9 +791,11 @@ class DbHelp:
             f" where t_planning in ({','.join(str(t) for t in ts)})"
         )
         log.debug(stmt)
-        await session.execute(text(stmt))
-        await session.commit()
-        await session.close()
+        try:
+            await session.execute(text(stmt))
+            await session.commit()
+        finally:
+            await session.close()
 
     async def tidyup(self, t: float) -> None:
         session = AsyncSession(self.engine)
@@ -708,9 +804,11 @@ class DbHelp:
             f" where t_planning = {t}"
         )
         log.debug(stmt)
-        await session.execute(text(stmt))
-        await session.commit()
-        await session.close()
+        try:
+            await session.execute(text(stmt))
+            await session.commit()
+        finally:
+            await session.close()
 
 
 class MockDbHelp(DbHelp):

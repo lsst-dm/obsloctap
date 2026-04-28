@@ -135,7 +135,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         await dbhelp.insert_obsplan(obsplan)
         oldest = await dbhelp.find_oldest_plan()
         # now we have visits get exposures
-        # but test negate
+        # but test negate - i.e. its not scheduled (so aborted or performwd)
         fillin = await dbhelp.find_oldest_plan(negate=True)
         self.assertEqual(0, fillin, " Nothign is observed ")
         helper = await TestConsdb.setup_db()
@@ -180,8 +180,8 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         updated, inserted = await dbhelp.update_insert_exposures(
             exposures, session_touse=sess
         )
-        sess.commit()
-        sess.close()
+        await sess.commit()
+        await sess.close()
         # so all of these should be updated
         self.assertEqual(updated, noexps)  # should have updated the exposures
         plans2 = await dbhelp.get_schedule(time=0)
@@ -230,7 +230,12 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         # Get the obs_id from the first obsplan entry
         obs_id = obsplan[0].obs_id
         # Find the entry by obs_id
-        results = await dbhelp.find_by_obs_id(obs_id)
+        # should not return the     future .. even if it matches
+        results = await dbhelp.find_by_obs_id(obs_id, 0)
+        self.assertEqual(len(results), 0, "should have now matches with now=0")
+
+        now = Time.now().utc.to_value("mjd")
+        results = await dbhelp.find_by_obs_id(obs_id, now)
 
         # Should find 44 matched - obs_id is not unique inthe plan
         self.assertGreater(len(results), 0, "should at least have 1 match")
@@ -239,7 +244,7 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(found_plan.obs_id, obs_id)
 
         # Test with a non-existent obs_id
-        results = await dbhelp.find_by_obs_id("NONEXISTENT_ID")
+        results = await dbhelp.find_by_obs_id("NONEXISTENT_ID", now)
         self.assertEqual(
             len(results), 0, "Should find no entries for invalid obs_id"
         )

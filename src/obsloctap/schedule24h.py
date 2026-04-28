@@ -122,7 +122,7 @@ class Schedule24:
         await dbhelp.remove_old(obsplan)
         # mark older than 12 hour obs as aborted
         t: Time = Time.now() - TimeDelta(12 * u.h)
-        told = t.to_value("mjd")
+        told = t.utc.to_value("mjd")
         await dbhelp.mark_aborted_older(told)
         return await dbhelp.insert_obsplan(obsplan)
 
@@ -130,10 +130,12 @@ class Schedule24:
         """this will get 24h schedule then sleep for config.sleeptime or 12hrs
         it never exits .."""
         config = Configuration()
-        # config hours - sleep is in seconds
+        # config in hours - sleep is in seconds
         stime = config.sleeptime * 60 * 60
-        # this will be true always unless we pass in a number which is for test
+        # at start up it would be good to let the Consdb update have time
+        # but if testing .. just go
         log.info("Starting 24hr schedule updates ")
+        # this will be true always unless we pass in a number which is for test
         while stopafter != self.count:
             slp = stime
             try:

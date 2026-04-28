@@ -127,7 +127,7 @@ def convert_nextVisit(msg: dict) -> Obsplan:
         spectral_range = spectral_ranges[msg["filters"].lower()[0]]
         plan.em_min = spectral_range[0]
         plan.em_max = spectral_range[1]
-    plan.priority = 0  # 99% going to happen
+    plan.priority = 2  # 99% going to happen
     return plan
 
 

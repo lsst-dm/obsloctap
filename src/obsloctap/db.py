@@ -795,7 +795,7 @@ class DbHelp:
     async def db_cleanup(self) -> None:
         """call vacuum - do it periodically after deletes.
         Note: VACUUM requires autocommit mode, skip for SQLite in tests."""
-        if "sqlite" in self.engine.name:
+        if self.engine is None or "sqlite" in self.engine.url.drivername:
             return  # SQLite VACUUM can't run in transaction
         stmt = f'VACUUM "{Obsplan.__tablename__}"'
         await self.exec_commit(stmt)

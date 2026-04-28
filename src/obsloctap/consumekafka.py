@@ -124,7 +124,7 @@ def convert_nextVisit(msg: dict) -> Obsplan:
     plan.rubin_rot_sky_pos = msg["cameraAngle"]
     plan.target_name = msg["survey"]
     if msg["filters"]:
-        spectral_range = spectral_ranges[msg["filters"][0]]
+        spectral_range = spectral_ranges[msg["filters"].lower()[0]]
         plan.em_min = spectral_range[0]
         plan.em_max = spectral_range[1]
     plan.priority = 0  # 99% going to happen

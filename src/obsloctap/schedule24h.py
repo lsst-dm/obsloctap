@@ -124,6 +124,7 @@ class Schedule24:
         t: Time = Time.now() - TimeDelta(12 * u.h)
         told = t.utc.to_value("mjd")
         await dbhelp.mark_aborted_older(told)
+        await dbhelp.db_cleanup()  # VACUUM
         return await dbhelp.insert_obsplan(obsplan)
 
     async def do24hs(self, stopafter: int = 0) -> None:

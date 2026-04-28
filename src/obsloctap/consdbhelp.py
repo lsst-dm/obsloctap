@@ -74,7 +74,9 @@ async def do_exp_updates(lastconsdb: float, stopafter: int = 0) -> int:
 
     sec = 20
     if stopafter == 0:
-        log.info(f"Exposure(ConsD) update waiting {sec}s for other updates ")
+        log.info(
+            f"Exposure(from ConsDB) update waiting {sec}s for other updates "
+        )
         await asyncio.sleep(sec)
 
     # this will be true always unless we pass in a number which is for test

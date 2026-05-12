@@ -33,6 +33,7 @@ spectral_ranges = {
     "other:pinhole": [3.8e-07, 7e-07],
     "ot~": [3.8e-07, 7e-07],
     "none": [3.8e-07, 7e-07],  # popped up Apr 28 2026
+    "n": [3.8e-07, 7e-07],  # popped up Apr 28 2026
 }
 
 

@@ -131,7 +131,6 @@ function renderTable() {
     table.innerHTML = "<tr><td>No data loaded</td></tr>";
     return;
   }
-  // Filtering
   const statusFilter = document.getElementById('statusFilter').value;
   const targetFilter = document.getElementById('targetFilter').value;
   let filtered = data.filter(obj =>
@@ -139,25 +138,28 @@ function renderTable() {
     (!targetFilter || obj.target_name === targetFilter)
   );
   const keys = Object.keys(filtered[0]);
-  table.innerHTML =
-  `<tr>` +
-  mjdFields.map(f => `<th>${f}_UTC</th>`).join('') +
-  keys.map(k => `<th>${k}</th>`).join('') +
-  `</tr>`;
 
-  filtered.forEach(obj => {
-    table.innerHTML += `<tr>` +
-      mjdFields.map(f =>
-        `<td>${typeof obj[f] === "number" ? mjdToUTC(obj[f]) : ""}</td>`
-      ).join('') +
-      keys.map(k => `<td>${obj[k]}</td>`).join('') +
-      `</tr>`;
-  });
+  // Build entire HTML string first
+  let html = `<tr>` +
+    mjdFields.map(f => `<th>${f}_UTC</th>`).join('') +
+    keys.map(k => `<th>${k}</th>`).join('') +
+    `</tr>`;
+
+  html += filtered.map(obj =>
+    `<tr>` +
+    mjdFields.map(f =>
+      `<td>${typeof obj[f] === "number" ? mjdToUTC(obj[f]) : ""}</td>`
+    ).join('') +
+    keys.map(k => `<td>${obj[k]}</td>`).join('') +
+    `</tr>`
+  ).join('');
+
+  // Single DOM update
+  table.innerHTML = html;
 }
 
-// Auto-fetch data on page load - but using inputs provided
+// NO Auto-fetch data on page load - populate inputs provided
 initInputsFromQuery();
-fetchData();
 
 </script>
 </body>

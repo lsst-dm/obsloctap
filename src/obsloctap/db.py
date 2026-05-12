@@ -91,6 +91,28 @@ class DbHelp:
     def get_session(self) -> AsyncSession:
         return AsyncSession(self.engine)
 
+    async def exec_commit(self, stmt: str) -> int:
+        """Execute a statement, commit, and return rowcount."""
+        log.debug(stmt)
+        async with AsyncSession(self.engine) as session:
+            res = await session.execute(text(stmt))
+            await session.commit()
+            return res.rowcount or 0
+
+    async def exec_fetchall(self, stmt: str) -> Sequence[Row[Any]]:
+        """Execute a query and return all rows."""
+        log.debug(stmt)
+        async with AsyncSession(self.engine) as session:
+            res = await session.execute(text(stmt))
+            return res.all()
+
+    async def exec_fetchone(self, stmt: str) -> Row[Any] | None:
+        """Execute a query and return one row or None."""
+        log.debug(stmt)
+        async with AsyncSession(self.engine) as session:
+            res = await session.execute(text(stmt))
+            return res.fetchone()
+
     def process(self, result: Sequence[Row[Any]]) -> list[Obsplan]:
         """
         Process the result of the query to make a list of Obsplan.
@@ -139,14 +161,10 @@ class DbHelp:
             f" order by t_planning DESC "
             f"{limitclause}"
         )
-        log.debug(f"get_schedule: {statement}")
-        session = AsyncSession(self.engine)
-        result = await session.execute(text(statement))
-        obs = result.all()
-        log.debug(f"Got scedule with {len(obs or [])} elements")
+        obs = await self.exec_fetchall(statement)
+        log.debug(f"Got schedule with {len(obs or [])} elements")
         if len(obs) == 0 and time != 0:
             log.info(f"No observations between {startmjd}" f"and {window}")
-        await session.close()
         return self.process(obs)
 
     async def insert_obs(
@@ -672,13 +690,9 @@ class DbHelp:
                 f" where t_planning between {mint} and {maxt}"
                 f" order by t_planning DESC"
             )
-            log.debug(f"remove_flag: {statement}")
-            session = AsyncSession(self.engine)
-            try:
-                result = await session.execute(text(statement))
-                oldobs: list[Obsplan] = self.process(result.all())
-            finally:
-                await session.close()
+            oldobs: list[Obsplan] = self.process(
+                await self.exec_fetchall(statement)
+            )
 
             # Build a set of old t_planning values that get deleted/replaced
             todelete: list[float] = []
@@ -747,68 +761,54 @@ class DbHelp:
         """Mark observations as aborted  before time (mjd).
         Returns number of rows updated."""
         async with self._write_lock:
-            session = AsyncSession(self.engine)
-            try:
-                stmt = (
-                    f'update {self.schema}"{Obsplan.__tablename__}"'
-                    f" set execution_status = 'Aborted' "
-                    f" where t_planning < {time} and"
-                    f" execution_status = 'Scheduled' "
-                )
-                res = await session.execute(text(stmt))
-                await session.commit()
-                count = res.rowcount
-                log.debug(f"marked aborted({count}): {stmt}")
-                return count
-            finally:
-                await session.close()
+            stmt = (
+                f'update {self.schema}"{Obsplan.__tablename__}"'
+                f" set execution_status = 'Aborted' "
+                f" where t_planning < {time} and"
+                f" execution_status = 'Scheduled' "
+            )
+            count = await self.exec_commit(stmt)
+            log.debug(f"marked aborted({count})")
+            return count
 
     async def mark_not_observed(self, ts: list[float]) -> int:
         """Mark observations as aborted .
         Returns number of rows updated."""
         if not ts or len(ts) == 0:
             return 0
-        session = AsyncSession(self.engine)
         stmt = (
             f'update {self.schema}"{Obsplan.__tablename__}"'
             f" set execution_status = 'Aborted' "
             f" where t_planning in ({','.join(str(t) for t in ts)})"
         )
-        try:
-            log.debug(f"mark_obs: {stmt}")
-            res = await session.execute(text(stmt))
-            await session.commit()
-        finally:
-            await session.close()
-        return res.rowcount
+        return await self.exec_commit(stmt)
 
     async def delete_obs(self, ts: list[float]) -> None:
         if not ts or len(ts) == 0:
             return
-        session = AsyncSession(self.engine)
         stmt = (
             f'delete from {self.schema}"{Obsplan.__tablename__}"'
             f" where t_planning in ({','.join(str(t) for t in ts)})"
         )
-        log.debug(stmt)
-        try:
-            await session.execute(text(stmt))
-            await session.commit()
-        finally:
-            await session.close()
+        await self.exec_commit(stmt)
+
+    async def db_cleanup(self) -> None:
+        """call vacuum - do it periodically after deletes.
+        Note: VACUUM requires autocommit mode, not a transaction."""
+        if self.engine is None or "sqlite" in self.engine.url.drivername:
+            return  # SQLite VACUUM can't run in transaction
+        # VACUUM must run outside a transaction - use raw connection
+        stmt = f'VACUUM {self.schema}"{Obsplan.__tablename__}"'
+        async with self.engine.connect() as conn:
+            await conn.execution_options(isolation_level="AUTOCOMMIT")
+            await conn.execute(text(stmt))
 
     async def tidyup(self, t: float) -> None:
-        session = AsyncSession(self.engine)
         stmt = (
             f'delete from {self.schema}"{Obsplan.__tablename__}"'
             f" where t_planning = {t}"
         )
-        log.debug(stmt)
-        try:
-            await session.execute(text(stmt))
-            await session.commit()
-        finally:
-            await session.close()
+        await self.exec_commit(stmt)
 
 
 class MockDbHelp(DbHelp):

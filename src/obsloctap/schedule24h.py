@@ -26,6 +26,7 @@ from astropy.time import Time, TimeDelta
 from pandas import DataFrame
 from rubin_sim import __version__ as rubin_sim_version
 from rubin_sim.sim_archive import sim_archive
+from rubin_sim.sim_archive.sim_archive import NoMatchingSimulationsFoundError
 
 from obsloctap.config import Configuration
 from obsloctap.db import DbHelpProvider
@@ -124,6 +125,7 @@ class Schedule24:
         t: Time = Time.now() - TimeDelta(12 * u.h)
         told = t.utc.to_value("mjd")
         await dbhelp.mark_aborted_older(told)
+        await dbhelp.db_cleanup()  # VACUUM
         return await dbhelp.insert_obsplan(obsplan)
 
     async def do24hs(self, stopafter: int = 0) -> None:
@@ -145,10 +147,11 @@ class Schedule24:
                     f"{self.count} runs."
                 )
                 self.count = self.count + 1
-            except PermissionError:
+            except (PermissionError, NoMatchingSimulationsFoundError):
                 slp = 60 * 60
                 log.exception(
-                    f"Problem with 24 hour schedule - will try agin in {slp}s"
+                    f"Problem getting 24 hour schedule sim - "
+                    f"will try again in {slp / 60}min"
                 )
             except URLError:
                 log.exception("URL/network error")

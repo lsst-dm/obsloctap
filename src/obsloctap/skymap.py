@@ -828,7 +828,6 @@ class ScheduleSkyMap:
             f'<span class="swatch" style="background:{color}"></span>{band}'
             f"</span>"
             for band, color in FILTER_COLORS.items()
-            if band != "other"
         )
 
     def _build_stats_html(self) -> str:

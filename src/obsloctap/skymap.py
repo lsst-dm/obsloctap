@@ -79,6 +79,7 @@ FILTER_COLORS: dict[str, str] = {
     "i": "#2af5ff",
     "z": "#a7f9c1",
     "y": "#fdc900",
+    "other": "#888888",  # grey
 }
 # Light-background palette used by the PDF export.
 _FILTER_COLORS_PRINT: dict[str, str] = {
@@ -88,6 +89,7 @@ _FILTER_COLORS_PRINT: dict[str, str] = {
     "i": "#370201",
     "z": "#BA52FF",
     "y": "#61A2B3",
+    "other": "#FF8C00",  # dark orange - distinct from existing colors
 }
 
 _BAND_NAMES: set[str] = set(FILTER_COLORS.keys())
@@ -179,11 +181,9 @@ def _get_band(em_min: float, em_max: float) -> str:
         If the spectral range is unset (both zero) or does not match any
         known band.
     """
+    undetermined = "other"
     if em_min == 0.0 and em_max == 0.0:
-        raise ValueError(
-            "Spectral range is unset "
-            "(em_min=0, em_max=0); cannot determine band."
-        )
+        return undetermined
     # Exact match against catalogue (stored values match catalogue exactly)
     for band, (lo, hi) in spectral_ranges.items():
         if band not in _BAND_NAMES:
@@ -201,10 +201,8 @@ def _get_band(em_min: float, em_max: float) -> str:
         if dist < best_dist:
             best_dist, best_band = dist, band
     if best_band is None:
-        raise ValueError(
-            f"No known band matches spectral range "
-            f"em_min={em_min}, em_max={em_max}."
-        )
+        return undetermined
+
     return best_band
 
 
@@ -1276,9 +1274,7 @@ class ScheduleSkyMap:
         """Return the ordered set of filter bands to expose in the UI."""
         band_order = ["u", "g", "r", "i", "z", "y", "other"]
         bands_in_data = set(bands_in_columns)
-        bands_present: list[str] = ["u", "g", "r", "i", "z", "y"]
-        if "other" in bands_in_data:
-            bands_present.append("other")
+        bands_present: list[str] = ["u", "g", "r", "i", "z", "y", "other"]
         for band in sorted(bands_in_data - set(band_order)):
             bands_present.append(band)
         return bands_present

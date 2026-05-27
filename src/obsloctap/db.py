@@ -130,12 +130,16 @@ class DbHelp:
         return obslist
 
     async def get_schedule(
-        self, time: float = 0, start: Time | None = None
-    ) -> list[Obsplan]:
+        self,
+        time: float = 0,
+        start: Time | None = None,
+        columns: list[str] | None = None,
+    ) -> list[Obsplan] | list[dict[str, Any]]:
         """Return the latest schedule item from the DB.
         time is a number of hours from start for how much schedule to return
         if no start is provided now in UTC is assumed
-        if time is zero we just take top obsplanLimit(1000) rows."""
+        if time is zero we just take top obsplanLimit(1000) rows.
+        if columns is provided, only those columns are returned as dicts."""
 
         config = Configuration()
 
@@ -154,8 +158,14 @@ class DbHelp:
             )
             limitclause = ""
 
+        # Use subset of columns if specified
+        if columns:
+            select_fields = ",".join(columns)
+        else:
+            select_fields = self.insert_fields
+
         statement = (
-            f"select {self.insert_fields} from "
+            f"select {select_fields} from "
             f'{self.schema}"{Obsplan.__tablename__}"'
             f"{whereclause}"
             f" order by t_planning DESC "
@@ -165,6 +175,10 @@ class DbHelp:
         log.debug(f"Got schedule with {len(obs or [])} elements")
         if len(obs) == 0 and time != 0:
             log.info(f"No observations between {startmjd}" f"and {window}")
+
+        # Return dicts if columns specified, else Obsplan objects
+        if columns:
+            return [dict(zip(columns, row)) for row in obs]
         return self.process(obs)
 
     async def insert_obs(
@@ -815,10 +829,12 @@ class MockDbHelp(DbHelp):
     obslist = list[Obsplan]()
 
     async def get_schedule(
-        self, time: float = 0, start: Time | None = None
-    ) -> list[Obsplan]:
+        self,
+        time: float = 0,
+        start: Time | None = None,
+        columns: list[str] | None = None,
+    ) -> list[Obsplan] | list[dict[str, Any]]:
         log.warning(f"Using MOCKDBHelp start {start}, time {time} ignored")
-        observations = []
         obs = Obsplan()
         obs.t_planning = 60032.194918981484
         obs.s_ra = 90.90909091666666
@@ -827,8 +843,10 @@ class MockDbHelp(DbHelp):
         obs.rubin_nexp = 3
         obs.em_min = spectral_ranges["r"][0]
         obs.em_max = spectral_ranges["r"][1]
-        observations.append(obs)
-        return observations
+
+        if columns:
+            return [{col: getattr(obs, col) for col in columns}]
+        return [obs]
 
     async def insert_obsplan(self, observations: list[Obsplan]) -> int:
         MockDbHelp.obslist.extend(observations)

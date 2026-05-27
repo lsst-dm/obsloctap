@@ -14,6 +14,7 @@
 import io
 import json
 import logging
+from typing import Any, cast
 
 from astropy.io.votable import from_table, writeto
 from astropy.table import Table
@@ -126,18 +127,19 @@ async def get_schedule(
             pass
 
         logger.info(f"Converted time: {success} - Using start time: {t}")
-        schedule = await dbhelp.get_schedule(time, start=t)
+        result = await dbhelp.get_schedule(
+            time, start=t, columns=requested_cols or None
+        )
     else:
-        schedule = await dbhelp.get_schedule(time)
+        result = await dbhelp.get_schedule(
+            time, columns=requested_cols or None
+        )
 
-    # Convert to dicts and filter columns if requested
+    # Convert to dicts - result is already dicts if columns specified
     if requested_cols:
-        data = [
-            {k: v for k, v in obs.model_dump().items() if k in requested_cols}
-            for obs in schedule
-        ]
+        data: list[dict[str, Any]] = cast(list[dict[str, Any]], result)
     else:
-        data = [obs.model_dump() for obs in schedule]
+        data = [obs.model_dump() for obs in cast(list[Obsplan], result)]
 
     # Convert schedule to the requested format
     fmt = RESPONSEFORMAT.lower()
@@ -207,9 +209,11 @@ async def get_skymap(
             except Exception:
                 pass
             logger.info(f"Converted time: {success} - Using start time: {t}")
-            schedule = await dbhelp.get_schedule(time, start=t)
+            schedule = cast(
+                list[Obsplan], await dbhelp.get_schedule(time, start=t)
+            )
         else:
-            schedule = await dbhelp.get_schedule(time)
+            schedule = cast(list[Obsplan], await dbhelp.get_schedule(time))
         html = make_sky_html(
             schedule,
             start_val=start,

@@ -26,7 +26,7 @@ from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
 
 from ..config import config
-from ..db import DbHelpProvider
+from ..db import OBSPLAN_FIELDS, DbHelpProvider
 from ..models import Index, Obsplan
 from ..skymap import make_sky_html
 
@@ -89,9 +89,27 @@ async def get_schedule(
         description="Response format: json, application/json, "
         "votable, application/x-votable+xml, text/xml, csv, text/csv",
     ),
+    columns: str = Query(
+        "",
+        description="Comma-separated list of columns to return. "
+        "Default (empty) returns all columns.",
+    ),
     logger: BoundLogger = Depends(logger_dependency),
 ) -> Response:
     logger.info(f"Schedule requested for time: {time}, start {start}")
+
+    # Parse and validate columns parameter
+    requested_cols: list[str] = []
+    if columns:
+        requested_cols = [c.strip() for c in columns.split(",") if c.strip()]
+        invalid = [c for c in requested_cols if c not in OBSPLAN_FIELDS]
+        if invalid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid column(s): {', '.join(invalid)}. "
+                f"Valid columns: {', '.join(OBSPLAN_FIELDS)}",
+            )
+
     dbhelp = await DbHelpProvider.getHelper()
     if start and start.lower() != "now":
         t = Time.now() - TimeDelta("1440min")
@@ -112,18 +130,25 @@ async def get_schedule(
     else:
         schedule = await dbhelp.get_schedule(time)
 
+    # Convert to dicts and filter columns if requested
+    if requested_cols:
+        data = [
+            {k: v for k, v in obs.model_dump().items() if k in requested_cols}
+            for obs in schedule
+        ]
+    else:
+        data = [obs.model_dump() for obs in schedule]
+
     # Convert schedule to the requested format
     fmt = RESPONSEFORMAT.lower()
     if fmt in ("json", "application/json"):
         # Return JSON (default behavior)
-        data = [obs.model_dump() for obs in schedule]
         return Response(
             content=json.dumps(data), media_type="application/json"
         )
 
     elif fmt in ("votable", "application/x-votable+xml", "text/xml"):
         # Convert to VOTable using astropy
-        data = [obs.model_dump() for obs in schedule]
         if data:
             astro_table = Table(rows=data)
         else:
@@ -138,7 +163,6 @@ async def get_schedule(
 
     elif fmt in ("csv", "text/csv"):
         # Convert to CSV
-        data = [obs.model_dump() for obs in schedule]
         if data:
             astro_table = Table(rows=data)
         else:

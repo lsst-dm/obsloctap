@@ -101,3 +101,26 @@ async def test_get_schedule_responseformat(client: AsyncClient) -> None:
     )
     assert response.status_code == 415
     assert "Unsupported Media Type" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_columns(client: AsyncClient) -> None:
+    """Test columns parameter"""
+    DbHelpProvider.clear()
+
+    # Request specific columns
+    response = await client.get(
+        f"{config.path_prefix}/schedule?columns=t_planning, s_ra, s_dec"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    # Should only have the requested columns
+    assert set(data[0].keys()) == {"t_planning", "s_ra", "s_dec"}
+
+    # Invalid column
+    response = await client.get(
+        f"{config.path_prefix}/schedule?columns=t_planning, bad_column"
+    )
+    assert response.status_code == 400
+    assert "Invalid column" in response.json()["detail"]

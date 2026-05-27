@@ -12,6 +12,10 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background: #eaeaea; }
     #status { color: #1a6b2a; font-weight: bold; margin-left: 15px; }
+    #columnsSection { margin: 10px 0; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
+    #columnsSection summary { cursor: pointer; font-weight: bold; }
+    #columnsList { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    #columnsList label { min-width: 150px; font-size: 0.9em; }
   </style>
   <link rel="icon" href="/obsloctap/favicon.ico" type="image/x-icon">
 </head>
@@ -27,8 +31,14 @@
   <div>
     <label>Start (MJD or ISO): <input type="string" step="any" id="startInput" value="now"></label>
     <label>Time (Hours): <input type="number" step="any" id="timeInput" value="12"></label>
+    <label>Format:
+      <select id="formatSelect">
+        <option value="json">JSON</option>
+        <option value="votable">VOTable</option>
+        <option value="csv">CSV</option>
+      </select>
+    </label>
     <button onclick="fetchData()">Fetch</button>
-    <button onclick="resetJson()">Reset JSON</button>
     <button onclick="fetchMap()">Map View</button>
   </div>
   <div>
@@ -43,12 +53,49 @@
       </select>
     </label>
   </div>
+  <details id="columnsSection">
+    <summary>Columns (click to expand)</summary>
+    <button type="button" onclick="selectAllColumns(true)">Select All</button>
+    <button type="button" onclick="selectAllColumns(false)">Select None</button>
+    <div id="columnsList"></div>
+  </details>
   <table id="jsonTable"></table>
 
 <script>
 let originalData = [];
 let data = [];
 let mjdFields = ["t_planning"];
+
+const OBSPLAN_FIELDS = [
+  "t_planning", "target_name", "obs_id", "obs_collection",
+  "s_ra", "s_dec", "s_fov", "s_region", "s_resolution",
+  "t_min", "t_max", "t_exptime", "t_resolution",
+  "em_min", "em_max", "em_res_power", "o_ucd",
+  "pol_states", "pol_xel", "facility_name", "instrument_name",
+  "t_plan_exptime", "category", "priority", "execution_status",
+  "tracking_type", "rubin_rot_sky_pos", "rubin_nexp"
+];
+
+function initColumns() {
+  const container = document.getElementById('columnsList');
+  container.innerHTML = OBSPLAN_FIELDS.map(col =>
+    `<label><input type="checkbox" name="col" value="${col}" checked> ${col}</label>`
+  ).join('');
+}
+
+function selectAllColumns(checked) {
+  document.querySelectorAll('#columnsList input[type="checkbox"]').forEach(cb => {
+    cb.checked = checked;
+  });
+}
+
+function getSelectedColumns() {
+  const checked = document.querySelectorAll('#columnsList input[type="checkbox"]:checked');
+  if (checked.length === 0 || checked.length === OBSPLAN_FIELDS.length) {
+    return '';  // All or none = return all columns
+  }
+  return Array.from(checked).map(cb => cb.value).join(',');
+}
 
 function initInputsFromQuery() {
   const params = new URLSearchParams(window.location.search);
@@ -83,25 +130,43 @@ async function fetchData() {
     // Get start and time values from input fields
     const start = encodeURIComponent(document.getElementById('startInput').value);
     const time = encodeURIComponent(document.getElementById('timeInput').value);
+    const format = document.getElementById('formatSelect').value;
+    const columns = getSelectedColumns();
 
-    const url = `/obsloctap/schedule?start=${start}&time=${time}`;
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
-    data = await resp.json();
-    if (!Array.isArray(data)) data = [data];
-    originalData = JSON.parse(JSON.stringify(data));
-    document.getElementById('status').textContent = `Loaded ${data.length} rows.`;
-    populateFilters();
-    renderTable();
+    let url = `/obsloctap/schedule?start=${start}&time=${time}&RESPONSEFORMAT=${format}`;
+    if (columns) {
+      url += `&columns=${encodeURIComponent(columns)}`;
+    }
+
+    if (format === 'json') {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
+      data = await resp.json();
+      if (!Array.isArray(data)) data = [data];
+      originalData = JSON.parse(JSON.stringify(data));
+      document.getElementById('status').textContent = `Loaded ${data.length} rows.`;
+      populateFilters();
+      renderTable();
+    } else {
+      // For VOTable and CSV, trigger download
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
+      const blob = await resp.blob();
+      const ext = format === 'votable' ? 'xml' : 'csv';
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `schedule.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.getElementById('status').textContent = `Downloaded schedule.${ext}`;
+    }
   } catch (e) {
     document.getElementById('status').textContent = "Error: " + e.message;
     document.getElementById('jsonTable').innerHTML = "";
   }
-}
-
-function resetJson() {
-  data = JSON.parse(JSON.stringify(originalData));
-  renderTable();
 }
 
 function mjdToUTC(mjd) {
@@ -160,6 +225,7 @@ function renderTable() {
 
 // NO Auto-fetch data on page load - populate inputs provided
 initInputsFromQuery();
+initColumns();
 
 </script>
 </body>

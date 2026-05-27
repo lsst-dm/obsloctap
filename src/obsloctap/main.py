@@ -51,7 +51,7 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup code
-    logging.info("Starting up")
+    logging.info(f"Starting obsloctap version {version('obsloctap')}")
     yield
     logging.info("Shutting down")
     await http_client_dependency.aclose()

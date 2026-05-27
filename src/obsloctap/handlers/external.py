@@ -11,18 +11,23 @@
 
 """Handlers for the app's external root, ``/obsloctap/``."""
 
+import io
+import json
 import logging
+from typing import Any, cast
 
+from astropy.io.votable import from_table, writeto
+from astropy.table import Table
 from astropy.time import Time, TimeDelta
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.params import Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from safir.dependencies.logger import logger_dependency
 from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
 
 from ..config import config
-from ..db import DbHelpProvider
+from ..db import DbHelpProvider, validate_columns, validate_predicate
 from ..models import Index, Obsplan
 from ..skymap import make_sky_html
 
@@ -80,9 +85,43 @@ async def get_schedule(
         description="time to start from 'now' or ISO 'YYYY-MM-DD HH:MM:SS'",
     ),
     time: int = Query(24, description="hours[1-48] for schedule lookahead"),
+    RESPONSEFORMAT: str = Query(
+        "json",
+        description="Response format: json, application/json, "
+        "votable, application/x-votable+xml, text/xml, csv, text/csv",
+    ),
+    columns: str = Query(
+        "",
+        description="Comma-separated list of columns to return. "
+        "Default (empty) returns all columns.",
+    ),
+    predicate: str = Query(
+        "",
+        description='Filter predicate, e.g. "s_ra > 100 AND s_dec < 50" or '
+        "\"execution_status = 'Performed'\". Supports =, !=, <, >, <=, >=, "
+        "LIKE, AND, OR.",
+    ),
     logger: BoundLogger = Depends(logger_dependency),
-) -> list[Obsplan]:
+) -> Response:
     logger.info(f"Schedule requested for time: {time}, start {start}")
+
+    # Parse and validate columns parameter
+    requested_cols: list[str] = []
+    if columns:
+        requested_cols = [c.strip() for c in columns.split(",") if c.strip()]
+        try:
+            validate_columns(requested_cols)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Validate predicate - check column names are valid
+    validated_predicate: str | None = None
+    if predicate:
+        try:
+            validated_predicate = validate_predicate(predicate)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     dbhelp = await DbHelpProvider.getHelper()
     if start and start.lower() != "now":
         t = Time.now() - TimeDelta("1440min")
@@ -99,10 +138,62 @@ async def get_schedule(
             pass
 
         logger.info(f"Converted time: {success} - Using start time: {t}")
-        schedule = await dbhelp.get_schedule(time, start=t)
+        result = await dbhelp.get_schedule(
+            time,
+            start=t,
+            columns=requested_cols or None,
+            predicate=validated_predicate,
+        )
     else:
-        schedule = await dbhelp.get_schedule(time)
-    return schedule
+        result = await dbhelp.get_schedule(
+            time,
+            columns=requested_cols or None,
+            predicate=validated_predicate,
+        )
+
+    # Convert to dicts - result is already dicts if columns specified
+    if requested_cols:
+        data: list[dict[str, Any]] = cast(list[dict[str, Any]], result)
+    else:
+        data = [obs.model_dump() for obs in cast(list[Obsplan], result)]
+
+    # Convert schedule to the requested format
+    fmt = RESPONSEFORMAT.lower()
+    if fmt in ("json", "application/json"):
+        # Return JSON (default behavior)
+        return Response(
+            content=json.dumps(data), media_type="application/json"
+        )
+
+    elif fmt in ("votable", "application/x-votable+xml", "text/xml"):
+        # Convert to VOTable using astropy
+        if data:
+            astro_table = Table(rows=data)
+        else:
+            astro_table = Table()
+        votable = from_table(astro_table)
+        buffer = io.BytesIO()
+        writeto(votable, buffer)
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/x-votable+xml",
+        )
+
+    elif fmt in ("csv", "text/csv"):
+        # Convert to CSV
+        if data:
+            astro_table = Table(rows=data)
+        else:
+            astro_table = Table()
+        csv_buffer = io.StringIO()
+        astro_table.write(csv_buffer, format="csv")
+        return Response(content=csv_buffer.getvalue(), media_type="text/csv")
+
+    else:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported Media Type {RESPONSEFORMAT}",
+        )
 
 
 @external_router.get(
@@ -134,9 +225,11 @@ async def get_skymap(
             except Exception:
                 pass
             logger.info(f"Converted time: {success} - Using start time: {t}")
-            schedule = await dbhelp.get_schedule(time, start=t)
+            schedule = cast(
+                list[Obsplan], await dbhelp.get_schedule(time, start=t)
+            )
         else:
-            schedule = await dbhelp.get_schedule(time)
+            schedule = cast(list[Obsplan], await dbhelp.get_schedule(time))
         html = make_sky_html(
             schedule,
             start_val=start,

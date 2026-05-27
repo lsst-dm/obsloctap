@@ -61,3 +61,43 @@ async def test_get_schedule_start(client: AsyncClient) -> None:
         f"{config.path_prefix}/schedule?start=tomorrow"
     )
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_responseformat(client: AsyncClient) -> None:
+    """Test RESPONSEFORMAT parameter"""
+    DbHelpProvider.clear()
+
+    # JSON (default)
+    response = await client.get(f"{config.path_prefix}/schedule")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+
+    # Explicit JSON
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=json"
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+
+    # VOTable
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=votable"
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/x-votable+xml"
+    assert b"VOTABLE" in response.content
+
+    # CSV
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=csv"
+    )
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+
+    # Unsupported format
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=pdf"
+    )
+    assert response.status_code == 415
+    assert "Unsupported Media Type" in response.json()["detail"]

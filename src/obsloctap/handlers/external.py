@@ -11,12 +11,16 @@
 
 """Handlers for the app's external root, ``/obsloctap/``."""
 
+import io
+import json
 import logging
 
+from astropy.io.votable import from_table, writeto
+from astropy.table import Table
 from astropy.time import Time, TimeDelta
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.params import Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from safir.dependencies.logger import logger_dependency
 from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
@@ -80,8 +84,13 @@ async def get_schedule(
         description="time to start from 'now' or ISO 'YYYY-MM-DD HH:MM:SS'",
     ),
     time: int = Query(24, description="hours[1-48] for schedule lookahead"),
+    RESPONSEFORMAT: str = Query(
+        "json",
+        description="Response format: json, application/json, "
+        "votable, application/x-votable+xml, text/xml, csv, text/csv",
+    ),
     logger: BoundLogger = Depends(logger_dependency),
-) -> list[Obsplan]:
+) -> Response:
     logger.info(f"Schedule requested for time: {time}, start {start}")
     dbhelp = await DbHelpProvider.getHelper()
     if start and start.lower() != "now":
@@ -102,7 +111,47 @@ async def get_schedule(
         schedule = await dbhelp.get_schedule(time, start=t)
     else:
         schedule = await dbhelp.get_schedule(time)
-    return schedule
+
+    # Convert schedule to the requested format
+    fmt = RESPONSEFORMAT.lower()
+    if fmt in ("json", "application/json"):
+        # Return JSON (default behavior)
+        data = [obs.model_dump() for obs in schedule]
+        return Response(
+            content=json.dumps(data), media_type="application/json"
+        )
+
+    elif fmt in ("votable", "application/x-votable+xml", "text/xml"):
+        # Convert to VOTable using astropy
+        data = [obs.model_dump() for obs in schedule]
+        if data:
+            astro_table = Table(rows=data)
+        else:
+            astro_table = Table()
+        votable = from_table(astro_table)
+        buffer = io.BytesIO()
+        writeto(votable, buffer)
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/x-votable+xml",
+        )
+
+    elif fmt in ("csv", "text/csv"):
+        # Convert to CSV
+        data = [obs.model_dump() for obs in schedule]
+        if data:
+            astro_table = Table(rows=data)
+        else:
+            astro_table = Table()
+        csv_buffer = io.StringIO()
+        astro_table.write(csv_buffer, format="csv")
+        return Response(content=csv_buffer.getvalue(), media_type="text/csv")
+
+    else:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported Media Type {RESPONSEFORMAT}",
+        )
 
 
 @external_router.get(

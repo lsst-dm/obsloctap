@@ -11,10 +11,17 @@
 
 """Helper for the database -so it may be mocked in test."""
 
-__all__ = ["DbHelp", "DbHelpProvider", "OBSPLAN_FIELDS"]
+__all__ = [
+    "DbHelp",
+    "DbHelpProvider",
+    "OBSPLAN_FIELDS",
+    "validate_columns",
+    "validate_predicate",
+]
 
 import asyncio
 import os
+import re
 from io import StringIO
 from typing import Any, Sequence
 
@@ -62,6 +69,47 @@ OBSPLAN_FIELDS = [
     "rubin_rot_sky_pos",  # FLOAT,
     "rubin_nexp",  # INTEGER
 ]
+
+
+def validate_columns(columns: list[str]) -> list[str]:
+    """Validate a list of column names are valid OBSPLAN_FIELDS.
+
+    Raises ValueError if invalid column names are found.
+    Returns the columns list if valid.
+    """
+    invalid = [c for c in columns if c not in OBSPLAN_FIELDS]
+    if invalid:
+        raise ValueError(
+            f"Invalid column(s): {', '.join(invalid)}. "
+            f"Valid columns: {', '.join(OBSPLAN_FIELDS)}"
+        )
+    return columns
+
+
+def validate_predicate(predicate: str) -> str:
+    """Validate a predicate string and check column names are valid.
+
+    Raises ValueError if invalid column names are found.
+    Returns the predicate string if valid.
+    """
+    # Extract potential column names (words before comparators)
+    # Pattern: word followed by optional spaces and a comparator
+    pattern = r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|!=|<>|<=|>=|<|>|LIKE)"
+    matches = re.findall(pattern, predicate, re.IGNORECASE)
+
+    # Filter out SQL keywords and check remaining are valid columns
+    sql_keywords = {"AND", "OR", "NOT", "and", "or", "not"}
+    columns_used = [m for m in matches if m.upper() not in sql_keywords]
+
+    invalid = [c for c in columns_used if c not in OBSPLAN_FIELDS]
+    if invalid:
+        raise ValueError(
+            f"Invalid column(s) in predicate: {', '.join(invalid)}. "
+            f"Valid columns: {', '.join(OBSPLAN_FIELDS)}"
+        )
+
+    return predicate
+
 
 # Configure logging
 # log: BoundLogger = (Depends(logger_dependency),)
@@ -134,16 +182,18 @@ class DbHelp:
         time: float = 0,
         start: Time | None = None,
         columns: list[str] | None = None,
+        predicate: str | None = None,
     ) -> list[Obsplan] | list[dict[str, Any]]:
         """Return the latest schedule item from the DB.
         time is a number of hours from start for how much schedule to return
         if no start is provided now in UTC is assumed
         if time is zero we just take top obsplanLimit(1000) rows.
-        if columns is provided, only those columns are returned as dicts."""
+        if columns is provided, only those columns are returned as dicts.
+        if predicate is provided, it is added to the WHERE clause."""
 
         config = Configuration()
 
-        whereclause = ""
+        where_conditions: list[str] = []
         limitclause = f" limit  {config.obsplanLimit}"
 
         if time != 0:
@@ -153,10 +203,19 @@ class DbHelp:
             win = now + td
             window = win.to_value("mjd")
 
-            whereclause = (
-                f" where t_planning between  " f"{startmjd} AND {window}"
+            where_conditions.append(
+                f"t_planning between {startmjd} AND {window}"
             )
             limitclause = ""
+
+        # Add predicate to where conditions if provided
+        if predicate:
+            where_conditions.append(f"({predicate})")
+
+        # Build WHERE clause
+        whereclause = ""
+        if where_conditions:
+            whereclause = " where " + " AND ".join(where_conditions)
 
         # Use subset of columns if specified
         if columns:
@@ -833,8 +892,12 @@ class MockDbHelp(DbHelp):
         time: float = 0,
         start: Time | None = None,
         columns: list[str] | None = None,
+        predicate: str | None = None,
     ) -> list[Obsplan] | list[dict[str, Any]]:
-        log.warning(f"Using MOCKDBHelp start {start}, time {time} ignored")
+        log.warning(
+            f"Using MOCKDBHelp start {start}, time {time}, "
+            f"predicate {predicate} ignored"
+        )
         obs = Obsplan()
         obs.t_planning = 60032.194918981484
         obs.s_ra = 90.90909091666666

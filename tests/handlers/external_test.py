@@ -124,3 +124,28 @@ async def test_get_schedule_columns(client: AsyncClient) -> None:
     )
     assert response.status_code == 400
     assert "Invalid column" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_predicate(client: AsyncClient) -> None:
+    """Test predicate parameter"""
+    DbHelpProvider.clear()
+
+    # Valid predicate
+    response = await client.get(
+        f"{config.path_prefix}/schedule?predicate=s_ra > 50"
+    )
+    assert response.status_code == 200
+
+    # Valid predicate with AND
+    response = await client.get(
+        f"{config.path_prefix}/schedule?" "predicate=s_ra > 50 AND s_dec < 0"
+    )
+    assert response.status_code == 200
+
+    # Invalid column in predicate
+    response = await client.get(
+        f"{config.path_prefix}/schedule?predicate=bad_column > 50"
+    )
+    assert response.status_code == 400
+    assert "Invalid column" in response.json()["detail"]

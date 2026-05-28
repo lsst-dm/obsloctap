@@ -27,7 +27,7 @@ from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
 
 from ..config import config
-from ..db import OBSPLAN_FIELDS, DbHelpProvider
+from ..db import DbHelpProvider, validate_columns, validate_predicate
 from ..models import Index, Obsplan
 from ..skymap import make_sky_html
 
@@ -95,6 +95,12 @@ async def get_schedule(
         description="Comma-separated list of columns to return. "
         "Default (empty) returns all columns.",
     ),
+    predicate: str = Query(
+        "",
+        description='Filter predicate, e.g. "s_ra > 100 AND s_dec < 50" or '
+        "\"execution_status = 'Performed'\". Supports =, !=, <, >, <=, >=, "
+        "LIKE, AND, OR.",
+    ),
     logger: BoundLogger = Depends(logger_dependency),
 ) -> Response:
     logger.info(f"Schedule requested for time: {time}, start {start}")
@@ -103,13 +109,18 @@ async def get_schedule(
     requested_cols: list[str] = []
     if columns:
         requested_cols = [c.strip() for c in columns.split(",") if c.strip()]
-        invalid = [c for c in requested_cols if c not in OBSPLAN_FIELDS]
-        if invalid:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid column(s): {', '.join(invalid)}. "
-                f"Valid columns: {', '.join(OBSPLAN_FIELDS)}",
-            )
+        try:
+            validate_columns(requested_cols)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Validate predicate - check column names are valid
+    validated_predicate: str | None = None
+    if predicate:
+        try:
+            validated_predicate = validate_predicate(predicate)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     dbhelp = await DbHelpProvider.getHelper()
     if start and start.lower() != "now":
@@ -128,11 +139,16 @@ async def get_schedule(
 
         logger.info(f"Converted time: {success} - Using start time: {t}")
         result = await dbhelp.get_schedule(
-            time, start=t, columns=requested_cols or None
+            time,
+            start=t,
+            columns=requested_cols or None,
+            predicate=validated_predicate,
         )
     else:
         result = await dbhelp.get_schedule(
-            time, columns=requested_cols or None
+            time,
+            columns=requested_cols or None,
+            predicate=validated_predicate,
         )
 
     # Convert to dicts - result is already dicts if columns specified

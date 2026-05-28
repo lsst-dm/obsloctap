@@ -52,6 +52,9 @@
         <option value="">All</option>
       </select>
     </label>
+    <label>Predicate:
+      <input type="text" id="predicateInput" placeholder="e.g. s_ra > 100 AND s_dec < 50" style="width: 300px;">
+    </label>
   </div>
   <details id="columnsSection">
     <summary>Columns (click to expand)</summary>
@@ -102,6 +105,9 @@ function initInputsFromQuery() {
 
   const start = params.get("start");
   const time = params.get("time");
+  const format = params.get("format");
+  const columns = params.get("columns");
+  const predicate = params.get("predicate");
 
   if (start !== null) {
     document.getElementById("startInput").value = start;
@@ -109,6 +115,37 @@ function initInputsFromQuery() {
   if (time !== null) {
     document.getElementById("timeInput").value = time;
   }
+  if (format !== null) {
+    document.getElementById("formatSelect").value = format;
+  }
+  if (columns !== null && columns !== '') {
+    // Uncheck all, then check only the specified columns
+    const selectedCols = columns.split(',').map(c => c.trim());
+    document.querySelectorAll('#columnsList input[type="checkbox"]').forEach(cb => {
+      cb.checked = selectedCols.includes(cb.value);
+    });
+  }
+  if (predicate !== null) {
+    document.getElementById("predicateInput").value = predicate;
+  }
+}
+
+function updateUrl() {
+  const start = document.getElementById('startInput').value;
+  const time = document.getElementById('timeInput').value;
+  const format = document.getElementById('formatSelect').value;
+  const columns = getSelectedColumns();
+  const predicate = document.getElementById('predicateInput').value;
+
+  const params = new URLSearchParams();
+  if (start && start !== 'now') params.set('start', start);
+  if (time && time !== '12') params.set('time', time);
+  if (format && format !== 'json') params.set('format', format);
+  if (columns) params.set('columns', columns);
+  if (predicate) params.set('predicate', predicate);
+
+  const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+  window.history.replaceState({}, '', newUrl);
 }
 
 async function fetchMap() {
@@ -132,11 +169,18 @@ async function fetchData() {
     const time = encodeURIComponent(document.getElementById('timeInput').value);
     const format = document.getElementById('formatSelect').value;
     const columns = getSelectedColumns();
+    const predicate = document.getElementById('predicateInput').value;
 
     let url = `/obsloctap/schedule?start=${start}&time=${time}&RESPONSEFORMAT=${format}`;
     if (columns) {
       url += `&columns=${encodeURIComponent(columns)}`;
     }
+    if (predicate) {
+      url += `&predicate=${encodeURIComponent(predicate)}`;
+    }
+
+    // Update URL to reflect current state
+    updateUrl();
 
     if (format === 'json') {
       const resp = await fetch(url);
@@ -224,8 +268,8 @@ function renderTable() {
 }
 
 // NO Auto-fetch data on page load - populate inputs provided
+initColumns();  // Must be before initInputsFromQuery so checkboxes exist
 initInputsFromQuery();
-initColumns();
 
 </script>
 </body>

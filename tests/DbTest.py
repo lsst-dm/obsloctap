@@ -191,6 +191,18 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated, noexps)  # should have updated the exposures
         plans2 = await dbhelp.get_schedule(time=0)
         self.assertEqual(len(plans2), plans + noexps)
+
+        # Verify obs_id uniqueness - each exposure_id should appear only once
+        exposure_ids = [str(exp.exposure_id) for exp in exposures]
+        obs_ids = [p.obs_id for p in plans2]
+        for exp_id in exposure_ids:
+            count = obs_ids.count(exp_id)
+            self.assertLessEqual(
+                count,
+                1,
+                f"exposure_id {exp_id} appears {count} times as obs_id",
+            )
+
         updated = await dbhelp.mark_not_observed(
             [plans2[1].t_planning, plans2[2].t_planning]
         )

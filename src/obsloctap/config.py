@@ -108,14 +108,14 @@ class Configuration(BaseSettings):
     )
 
     consdb_url: str = Field(
-        "usdf-summitdb-replica.slac.stanford.edu:5432",
-        title="URL for postgres database",
+        "",
+        title="URL for consdb postgres database",
         validation_alias="consdb_url",
     )
 
     consdb_username: str = Field(
         "usdf",
-        title="Consdb user for postgres database",
+        title="Consdb user for consdb postgres database",
         validation_alias="consdb_username",
     )
 

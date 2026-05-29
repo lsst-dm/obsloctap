@@ -462,9 +462,19 @@ class DbHelp:
                             break
 
                 if not done:
-                    unmatched += 1
-                    if await self.insert_exposure(exp, session):
-                        inserted += 1
+                    # Check if exposure_id already exists as obs_id
+                    existing = await self.find_by_obs_id(
+                        str(exp.exposure_id), now, session_look
+                    )
+                    if len(existing) > 0:
+                        log.debug(
+                            f"Exposure {exp.exposure_id} already "
+                            f"exists as obs_id"
+                        )
+                    else:
+                        unmatched += 1
+                        if await self.insert_exposure(exp, session):
+                            inserted += 1
                 if count % 500 == 0:
                     log.info(
                         f"Updated {updated}, unmatched {unmatched}, "
@@ -491,6 +501,8 @@ class DbHelp:
         """Put in an obsplan line based on an exposure.
         This is when consdb has an observation but it does not match
         any planned item.
+        t_planning is set to 0 since it was not planned - t_min has the
+        observation time
         Returns True if insert was successful, False otherwise."""
         if not exp.band or exp.band not in spectral_ranges:
             log.warning(

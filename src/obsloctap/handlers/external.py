@@ -27,8 +27,13 @@ from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
 
 from ..config import config
+from ..consdbhelp import (
+    ConsDbHelpProvider,
+    validate_exposure_columns,
+    validate_exposure_predicate,
+)
 from ..db import DbHelpProvider, validate_columns, validate_predicate
-from ..models import Index, Obsplan
+from ..models import Exposure, Index, Obsplan
 from ..skymap import make_sky_html
 
 __all__ = ["get_index", "external_router"]
@@ -248,3 +253,97 @@ async def get_skymap(
             "</body></html>"
         )
         return HTMLResponse(content=error_html, status_code=500)
+
+
+@external_router.get(
+    "/exposures",
+    description="Return exposures from ConsDB.",
+    response_model=list[Exposure],
+    response_model_exclude_none=True,
+    summary="Exposures",
+)
+async def get_exposures(
+    RESPONSEFORMAT: str = Query(
+        "json",
+        description="Response format: json, application/json, "
+        "votable, application/x-votable+xml, text/xml, csv, text/csv",
+    ),
+    columns: str = Query(
+        "",
+        description="Comma-separated list of columns to return. "
+        "Default (empty) returns all columns.",
+    ),
+    predicate: str = Query(
+        "",
+        description='Filter predicate, e.g. "s_ra > 100 AND s_dec < 50" or '
+        "\"band = 'r'\". Supports =, !=, <, >, <=, >=, LIKE, AND, OR.",
+    ),
+    limit: int = Query(1000, description="Maximum number of rows to return"),
+    logger: BoundLogger = Depends(logger_dependency),
+) -> Response:
+    logger.info(f"Exposures requested with predicate: {predicate}")
+
+    # Parse and validate columns parameter
+    requested_cols: list[str] = []
+    if columns:
+        requested_cols = [c.strip() for c in columns.split(",") if c.strip()]
+        try:
+            validate_exposure_columns(requested_cols)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Validate predicate
+    validated_predicate: str | None = None
+    if predicate:
+        try:
+            validated_predicate = validate_exposure_predicate(predicate)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    consdbhelp = await ConsDbHelpProvider.getHelper()
+    result = await consdbhelp.get_exposures(
+        columns=requested_cols or None,
+        predicate=validated_predicate,
+        limit=limit,
+    )
+
+    # Convert to dicts - result is already dicts if columns specified
+    if requested_cols:
+        data: list[dict[str, Any]] = cast(list[dict[str, Any]], result)
+    else:
+        data = [exp.model_dump() for exp in cast(list[Exposure], result)]
+
+    # Convert to the requested format
+    fmt = RESPONSEFORMAT.lower()
+    if fmt in ("json", "application/json"):
+        return Response(
+            content=json.dumps(data), media_type="application/json"
+        )
+
+    elif fmt in ("votable", "application/x-votable+xml", "text/xml"):
+        if data:
+            astro_table = Table(rows=data)
+        else:
+            astro_table = Table()
+        votable = from_table(astro_table)
+        buffer = io.BytesIO()
+        writeto(votable, buffer)
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/x-votable+xml",
+        )
+
+    elif fmt in ("csv", "text/csv"):
+        if data:
+            astro_table = Table(rows=data)
+        else:
+            astro_table = Table()
+        csv_buffer = io.StringIO()
+        astro_table.write(csv_buffer, format="csv")
+        return Response(content=csv_buffer.getvalue(), media_type="text/csv")
+
+    else:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported Media Type {RESPONSEFORMAT}",
+        )

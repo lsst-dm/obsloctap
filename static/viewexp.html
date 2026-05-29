@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>Rubin Exposure Viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { font-size: 2em; }
+    input, select, button { margin: 5px; padding: 4px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #eaeaea; }
+    #status { color: #1a6b2a; font-weight: bold; margin-left: 15px; }
+    #columnsSection { margin: 10px 0; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
+    #columnsSection summary { cursor: pointer; font-weight: bold; }
+    #columnsList { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    #columnsList label { min-width: 150px; font-size: 0.9em; }
+  </style>
+  <link rel="icon" href="/obsloctap/favicon.ico" type="image/x-icon">
+</head>
+<body>
+
+   <header style="display: flex; align-items: center; margin-bottom: 20px;">
+    <img src="logo.svg" alt="Logo" style="height: 50px; margin-right: 10px;">
+     <h1>Rubin Exposure Viewer</h1>
+  </header>
+  <div>
+    <span id="status"></span>
+  </div>
+  <div>
+    <label>Limit: <input type="number" id="limitInput" value="1000"></label>
+    <label>Format:
+      <select id="formatSelect">
+        <option value="json">JSON</option>
+        <option value="votable">VOTable</option>
+        <option value="csv">CSV</option>
+      </select>
+    </label>
+    <button onclick="fetchData()">Fetch</button>
+  </div>
+  <div>
+    <label>Filter by band:
+      <select id="bandFilter" onchange="renderTable()">
+        <option value="">All</option>
+      </select>
+    </label>
+    <label>Filter by target_name:
+      <select id="targetFilter" onchange="renderTable()">
+        <option value="">All</option>
+      </select>
+    </label>
+    <label>Predicate:
+      <input type="text" id="predicateInput" placeholder="e.g. s_ra > 100 AND s_dec < 50" style="width: 300px;">
+    </label>
+  </div>
+  <details id="columnsSection">
+    <summary>Columns (click to expand)</summary>
+    <button type="button" onclick="selectAllColumns(true)">Select All</button>
+    <button type="button" onclick="selectAllColumns(false)">Select None</button>
+    <div id="columnsList"></div>
+  </details>
+  <div style="margin: 10px 0;">
+    <label>API Call: <input type="text" id="apiCallBox" readonly style="width: 80%; font-family: monospace; font-size: 0.9em;"></label>
+  </div>
+  <table id="jsonTable"></table>
+
+<script>
+let originalData = [];
+let data = [];
+let mjdFields = ["obs_start_mjd"];
+
+const EXPOSURE_FIELDS = [
+  "exposure_id", "obs_start_mjd", "obs_end_mjd", "band",
+  "physical_filter", "s_ra", "s_dec", "target_name",
+  "science_program", "scheduler_note", "sky_rotation",
+  "can_see_sky", "observation_reason", "group_id"
+];
+
+function initColumns() {
+  const container = document.getElementById('columnsList');
+  container.innerHTML = EXPOSURE_FIELDS.map(col =>
+    `<label><input type="checkbox" name="col" value="${col}" checked> ${col}</label>`
+  ).join('');
+}
+
+function selectAllColumns(checked) {
+  document.querySelectorAll('#columnsList input[type="checkbox"]').forEach(cb => {
+    cb.checked = checked;
+  });
+}
+
+function getSelectedColumns() {
+  const checked = document.querySelectorAll('#columnsList input[type="checkbox"]:checked');
+  if (checked.length === 0 || checked.length === EXPOSURE_FIELDS.length) {
+    return '';  // All or none = return all columns
+  }
+  return Array.from(checked).map(cb => cb.value).join(',');
+}
+
+function initInputsFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+
+  const limit = params.get("limit");
+  const format = params.get("format");
+  const columns = params.get("columns");
+  const predicate = params.get("predicate");
+
+  if (limit !== null) {
+    document.getElementById("limitInput").value = limit;
+  }
+  if (format !== null) {
+    document.getElementById("formatSelect").value = format;
+  }
+  if (columns !== null && columns !== '') {
+    // Uncheck all, then check only the specified columns
+    const selectedCols = columns.split(',').map(c => c.trim());
+    document.querySelectorAll('#columnsList input[type="checkbox"]').forEach(cb => {
+      cb.checked = selectedCols.includes(cb.value);
+    });
+  }
+  if (predicate !== null) {
+    document.getElementById("predicateInput").value = predicate;
+  }
+}
+
+function updateUrl() {
+  const limit = document.getElementById('limitInput').value;
+  const format = document.getElementById('formatSelect').value;
+  const columns = getSelectedColumns();
+  const predicate = document.getElementById('predicateInput').value;
+
+  const params = new URLSearchParams();
+  if (limit && limit !== '1000') params.set('limit', limit);
+  if (format && format !== 'json') params.set('format', format);
+  if (columns) params.set('columns', columns);
+  if (predicate) params.set('predicate', predicate);
+
+  const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+  window.history.replaceState({}, '', newUrl);
+}
+
+async function fetchData() {
+  document.getElementById('status').textContent = "Loading…";
+  try {
+    const limit = encodeURIComponent(document.getElementById('limitInput').value);
+    const format = document.getElementById('formatSelect').value;
+    const columns = getSelectedColumns();
+    const predicate = document.getElementById('predicateInput').value;
+
+    let url = `/obsloctap/exposures?limit=${limit}&RESPONSEFORMAT=${format}`;
+    if (columns) {
+      url += `&columns=${encodeURIComponent(columns)}`;
+    }
+    if (predicate) {
+      url += `&predicate=${encodeURIComponent(predicate)}`;
+    }
+
+    // Show the API call
+    document.getElementById('apiCallBox').value = window.location.origin + url;
+
+    // Update URL to reflect current state
+    updateUrl();
+
+    if (format === 'json') {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
+      data = await resp.json();
+      if (!Array.isArray(data)) data = [data];
+      originalData = JSON.parse(JSON.stringify(data));
+      document.getElementById('status').textContent = `Loaded ${data.length} rows.`;
+      populateFilters();
+      renderTable();
+    } else {
+      // For VOTable and CSV, trigger download
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
+      const blob = await resp.blob();
+      const ext = format === 'votable' ? 'xml' : 'csv';
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `exposures.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.getElementById('status').textContent = `Downloaded exposures.${ext}`;
+    }
+  } catch (e) {
+    document.getElementById('status').textContent = "Error: " + e.message;
+    document.getElementById('jsonTable').innerHTML = "";
+  }
+}
+
+function mjdToUTC(mjd) {
+  if (typeof mjd !== "number") return "";
+  const JD = mjd + 2400000.5;
+  const unixMillis = (JD - 2440587.5) * 86400000;
+  const d = new Date(unixMillis);
+  if (isNaN(d.getTime())) return "";
+  const pad = n => n.toString().padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+function populateFilters() {
+  const bandSet = new Set(data.map(row => row.band));
+  const targetSet = new Set(data.map(row => row.target_name));
+  const bandFilter = document.getElementById('bandFilter');
+  const targetFilter = document.getElementById('targetFilter');
+  bandFilter.innerHTML = `<option value="">All</option>` +
+    [...bandSet].map(v => `<option value="${v}">${v}</option>`).join('');
+  targetFilter.innerHTML = `<option value="">All</option>` +
+    [...targetSet].map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+function renderTable() {
+  const table = document.getElementById('jsonTable');
+  if (!data.length) {
+    table.innerHTML = "<tr><td>No data loaded</td></tr>";
+    return;
+  }
+  const bandFilter = document.getElementById('bandFilter').value;
+  const targetFilter = document.getElementById('targetFilter').value;
+  let filtered = data.filter(obj =>
+    (!bandFilter || obj.band === bandFilter) &&
+    (!targetFilter || obj.target_name === targetFilter)
+  );
+  const keys = Object.keys(filtered[0]);
+
+  // Build entire HTML string first
+  let html = `<tr>` +
+    mjdFields.map(f => `<th>${f}_UTC</th>`).join('') +
+    keys.map(k => `<th>${k}</th>`).join('') +
+    `</tr>`;
+
+  html += filtered.map(obj =>
+    `<tr>` +
+    mjdFields.map(f =>
+      `<td>${typeof obj[f] === "number" ? mjdToUTC(obj[f]) : ""}</td>`
+    ).join('') +
+    keys.map(k => `<td>${obj[k]}</td>`).join('') +
+    `</tr>`
+  ).join('');
+
+  // Single DOM update
+  table.innerHTML = html;
+}
+
+// NO Auto-fetch data on page load - populate inputs provided
+initColumns();  // Must be before initInputsFromQuery so checkboxes exist
+initInputsFromQuery();
+
+</script>
+</body>
+</html>

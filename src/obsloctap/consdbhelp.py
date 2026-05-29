@@ -15,10 +15,14 @@ __all__ = [
     "ConsDbHelp",
     "ConsDbHelpProvider",
     "EXPOSURE_FIELDS",
+    "MockConsDbHelp",
     "do_exp_updates",
+    "validate_exposure_columns",
+    "validate_exposure_predicate",
 ]
 
 import asyncio
+import re
 from typing import Any, Sequence
 
 import structlog
@@ -52,6 +56,44 @@ EXPOSURE_FIELDS = [
     "observation_reason",
     "group_id",
 ]
+
+
+def validate_exposure_columns(columns: list[str]) -> list[str]:
+    """Validate a list of column names are valid EXPOSURE_FIELDS.
+
+    Raises ValueError if invalid column names are found.
+    Returns the columns list if valid.
+    """
+    invalid = [c for c in columns if c not in EXPOSURE_FIELDS]
+    if invalid:
+        raise ValueError(
+            f"Invalid column(s): {', '.join(invalid)}. "
+            f"Valid columns: {', '.join(EXPOSURE_FIELDS)}"
+        )
+    return columns
+
+
+def validate_exposure_predicate(predicate: str) -> str:
+    """Validate a predicate string and check column names are valid.
+
+    Raises ValueError if invalid column names are found.
+    Returns the predicate string if valid.
+    """
+    pattern = r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|!=|<>|<=|>=|<|>|LIKE)"
+    matches = re.findall(pattern, predicate, re.IGNORECASE)
+
+    sql_keywords = {"AND", "OR", "NOT", "and", "or", "not"}
+    columns_used = [m for m in matches if m.upper() not in sql_keywords]
+
+    invalid = [c for c in columns_used if c not in EXPOSURE_FIELDS]
+    if invalid:
+        raise ValueError(
+            f"Invalid column(s) in predicate: {', '.join(invalid)}. "
+            f"Valid columns: {', '.join(EXPOSURE_FIELDS)}"
+        )
+
+    return predicate
+
 
 # Configure logging
 log = structlog.getLogger(__name__)
@@ -188,14 +230,114 @@ class ConsDbHelp:
         rows = await self.get_exposure_rows_between(start, end)
         return self.process(rows)
 
+    async def get_exposures(
+        self,
+        columns: list[str] | None = None,
+        predicate: str | None = None,
+        limit: int = 1000,
+    ) -> list[Exposure] | list[dict[str, Any]]:
+        """Return exposures from ConsDB.
+
+        If columns is provided, only those columns are returned as dicts.
+        If predicate is provided, it is added to the WHERE clause.
+        """
+        # Use subset of columns if specified
+        if columns:
+            select_fields = ",".join(columns)
+        else:
+            select_fields = self.fields
+
+        where_conditions: list[str] = []
+        if predicate:
+            where_conditions.append(f"({predicate})")
+
+        whereclause = ""
+        if where_conditions:
+            whereclause = " WHERE " + " AND ".join(where_conditions)
+
+        statement = (
+            f'SELECT {select_fields} FROM {self.schema}"exposure"'
+            f"{whereclause} "
+            f"ORDER BY obs_start_mjd DESC "
+            f"LIMIT {limit}"
+        )
+        log.debug(f"Get exposures with {statement}")
+        rows: Sequence[Row] = []
+        session = self.get_session()
+        try:
+            result = await session.execute(text(statement))
+            rows = result.all()
+        except Exception as e:
+            log.error(f"Failed to get exposures {type(e).__name__} : {e}")
+        finally:
+            await session.close()
+
+        # Return dicts if columns specified, else Exposure objects
+        if columns:
+            return [dict(zip(columns, row)) for row in rows]
+        return self.process(rows)
+
+
+class MockConsDbHelp(ConsDbHelp):
+    """Mock ConsDbHelp that returns sample data for local testing."""
+
+    async def get_exposures_between(
+        self, start: float, end: float
+    ) -> list[Exposure]:
+        log.warning(f"Using MockConsDbHelp: start {start}, end {end} ignored")
+        return [self._sample_exposure()]
+
+    async def get_exposures(
+        self,
+        columns: list[str] | None = None,
+        predicate: str | None = None,
+        limit: int = 1000,
+    ) -> list[Exposure] | list[dict[str, Any]]:
+        log.warning(
+            f"Using MockConsDbHelp: predicate {predicate}, "
+            f"limit {limit} ignored"
+        )
+        exp = self._sample_exposure()
+        if columns:
+            return [{col: getattr(exp, col) for col in columns}]
+        return [exp]
+
+    def _sample_exposure(self) -> Exposure:
+        return Exposure(
+            exposure_id=2024010100001,
+            obs_start_mjd=60310.5,
+            obs_end_mjd=60310.501,
+            band="r",
+            physical_filter="r_03",
+            s_ra=150.0,
+            s_dec=-30.0,
+            target_name="MOCK_TARGET",
+            science_program="MOCK_PROGRAM",
+            scheduler_note="mock note",
+            sky_rotation=0.0,
+            can_see_sky=1,
+            observation_reason="science",
+            group_id="MOCK_GROUP_001",
+        )
+
 
 class ConsDbHelpProvider:
     consdb_helper: ConsDbHelp | None = None
 
     @staticmethod
+    def clear() -> None:
+        ConsDbHelpProvider.consdb_helper = None
+
+    @staticmethod
     async def getHelper() -> ConsDbHelp:
         if ConsDbHelpProvider.consdb_helper is None:
             config = Configuration()
+            # If no consdb_url configured, use mock
+            if not config.consdb_url:
+                log.info("No consdb_url configured, using MockConsDbHelp")
+                ConsDbHelpProvider.consdb_helper = MockConsDbHelp(engine=None)
+                return ConsDbHelpProvider.consdb_helper
+
             driver = "postgresql+asyncpg"
             full_url = (
                 f"{driver}://{config.consdb_username}:"

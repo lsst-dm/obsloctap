@@ -12,7 +12,12 @@ import pytest
 from astropy.time import Time
 
 from obsloctap.consdbhelp import ConsDbHelp, ConsDbHelpProvider
-from obsloctap.db import OBSPLAN_FIELDS, DbHelp
+from obsloctap.db import (
+    OBSPLAN_FIELDS,
+    DbHelp,
+    validate_columns,
+    validate_predicate,
+)
 from obsloctap.models import Obsplan, spectral_ranges
 from obsloctap.schedule24h import Schedule24
 from tests.ConsdbTest import TestConsdb, consdbendless2, consdbstarttime
@@ -186,6 +191,18 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated, noexps)  # should have updated the exposures
         plans2 = await dbhelp.get_schedule(time=0)
         self.assertEqual(len(plans2), plans + noexps)
+
+        # Verify obs_id uniqueness - each exposure_id should appear only once
+        exposure_ids = [str(exp.exposure_id) for exp in exposures]
+        obs_ids = [p.obs_id for p in plans2]
+        for exp_id in exposure_ids:
+            count = obs_ids.count(exp_id)
+            self.assertLessEqual(
+                count,
+                1,
+                f"exposure_id {exp_id} appears {count} times as obs_id",
+            )
+
         updated = await dbhelp.mark_not_observed(
             [plans2[1].t_planning, plans2[2].t_planning]
         )
@@ -317,3 +334,49 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(a.t_planning, b.t_planning)
         self.assertEqual(a.target_name, n.target_name)
+
+    def test_validate_columns(self) -> None:
+        # Valid columns
+        result = validate_columns(["s_ra", "s_dec", "t_planning"])
+        self.assertEqual(result, ["s_ra", "s_dec", "t_planning"])
+
+        # Single valid column
+        result = validate_columns(["execution_status"])
+        self.assertEqual(result, ["execution_status"])
+
+        # Invalid column should raise ValueError
+        with self.assertRaises(ValueError) as ctx:
+            validate_columns(["s_ra", "bad_column"])
+        self.assertIn("bad_column", str(ctx.exception))
+        self.assertIn("Invalid column", str(ctx.exception))
+
+        # All invalid columns
+        with self.assertRaises(ValueError) as ctx:
+            validate_columns(["foo", "bar"])
+        self.assertIn("foo", str(ctx.exception))
+        self.assertIn("bar", str(ctx.exception))
+
+    def test_validate_predicate(self) -> None:
+        # Valid predicates
+        result = validate_predicate("s_ra > 100")
+        self.assertEqual(result, "s_ra > 100")
+
+        result = validate_predicate("s_ra > 100 AND s_dec < 50")
+        self.assertEqual(result, "s_ra > 100 AND s_dec < 50")
+
+        result = validate_predicate("execution_status = 'Performed'")
+        self.assertEqual(result, "execution_status = 'Performed'")
+
+        result = validate_predicate("target_name LIKE '%NGC%'")
+        self.assertEqual(result, "target_name LIKE '%NGC%'")
+
+        # Invalid column in predicate should raise ValueError
+        with self.assertRaises(ValueError) as ctx:
+            validate_predicate("bad_column > 50")
+        self.assertIn("bad_column", str(ctx.exception))
+        self.assertIn("Invalid column", str(ctx.exception))
+
+        # Mix of valid and invalid
+        with self.assertRaises(ValueError) as ctx:
+            validate_predicate("s_ra > 100 AND bad_col < 50")
+        self.assertIn("bad_col", str(ctx.exception))

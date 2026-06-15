@@ -12,6 +12,7 @@
 
 import asyncio
 import logging
+from importlib.metadata import version
 
 import structlog
 from astropy.time import Time
@@ -25,6 +26,7 @@ from obsloctap.schedule24h import Schedule24
 level = getattr(logging, config.log_level.name, logging.INFO)
 structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(level))
 log = structlog.getLogger(__name__)
+log.info(f"Starting obsloctap ScheduleLoop version {version('obsloctap')}")
 log.info(f"Log level {config.log_level.name}, {config.log_level}")
 
 sched24 = Schedule24()

@@ -61,3 +61,91 @@ async def test_get_schedule_start(client: AsyncClient) -> None:
         f"{config.path_prefix}/schedule?start=tomorrow"
     )
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_responseformat(client: AsyncClient) -> None:
+    """Test RESPONSEFORMAT parameter"""
+    DbHelpProvider.clear()
+
+    # JSON (default)
+    response = await client.get(f"{config.path_prefix}/schedule")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+
+    # Explicit JSON
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=json"
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+
+    # VOTable
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=votable"
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/x-votable+xml"
+    assert b"VOTABLE" in response.content
+
+    # CSV
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=csv"
+    )
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+
+    # Unsupported format
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=pdf"
+    )
+    assert response.status_code == 415
+    assert "Unsupported Media Type" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_columns(client: AsyncClient) -> None:
+    """Test columns parameter"""
+    DbHelpProvider.clear()
+
+    # Request specific columns
+    response = await client.get(
+        f"{config.path_prefix}/schedule?columns=t_planning, s_ra, s_dec"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    # Should only have the requested columns
+    assert set(data[0].keys()) == {"t_planning", "s_ra", "s_dec"}
+
+    # Invalid column
+    response = await client.get(
+        f"{config.path_prefix}/schedule?columns=t_planning, bad_column"
+    )
+    assert response.status_code == 400
+    assert "Invalid column" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_predicate(client: AsyncClient) -> None:
+    """Test predicate parameter"""
+    DbHelpProvider.clear()
+
+    # Valid predicate
+    response = await client.get(
+        f"{config.path_prefix}/schedule?predicate=s_ra > 50"
+    )
+    assert response.status_code == 200
+
+    # Valid predicate with AND
+    response = await client.get(
+        f"{config.path_prefix}/schedule?" "predicate=s_ra > 50 AND s_dec < 0"
+    )
+    assert response.status_code == 200
+
+    # Invalid column in predicate
+    response = await client.get(
+        f"{config.path_prefix}/schedule?predicate=bad_column > 50"
+    )
+    assert response.status_code == 400
+    assert "Invalid column" in response.json()["detail"]

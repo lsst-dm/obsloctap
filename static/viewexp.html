@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
 
-  <title>Rubin Schedule Viewer</title>
+  <title>Rubin Exposure Viewer</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     h1 { font-size: 2em; }
@@ -23,14 +23,13 @@
 
    <header style="display: flex; align-items: center; margin-bottom: 20px;">
     <img src="logo.svg" alt="Logo" style="height: 50px; margin-right: 10px;">
-     <h1>Rubin Schedule Viewer</h1>
+     <h1>Rubin Exposure Viewer</h1>
   </header>
   <div>
     <span id="status"></span>
   </div>
   <div>
-    <label>Start (MJD or ISO): <input type="string" step="any" id="startInput" value="now"></label>
-    <label>Time (Hours): <input type="number" step="any" id="timeInput" value="12"></label>
+    <label>Limit: <input type="number" id="limitInput" value="1000"></label>
     <label>Format:
       <select id="formatSelect">
         <option value="json">JSON</option>
@@ -39,11 +38,10 @@
       </select>
     </label>
     <button onclick="fetchData()">Fetch</button>
-    <button onclick="fetchMap()">Map View</button>
   </div>
   <div>
-    <label>Filter by execution_status:
-      <select id="statusFilter" onchange="renderTable()">
+    <label>Filter by band:
+      <select id="bandFilter" onchange="renderTable()">
         <option value="">All</option>
       </select>
     </label>
@@ -70,21 +68,18 @@
 <script>
 let originalData = [];
 let data = [];
-let mjdFields = ["t_planning"];
+let mjdFields = ["obs_start_mjd"];
 
-const OBSPLAN_FIELDS = [
-  "t_planning", "target_name", "obs_id", "obs_collection",
-  "s_ra", "s_dec", "s_fov", "s_region", "s_resolution",
-  "t_min", "t_max", "t_exptime", "t_resolution",
-  "em_min", "em_max", "em_res_power", "o_ucd",
-  "pol_states", "pol_xel", "facility_name", "instrument_name",
-  "t_plan_exptime", "category", "priority", "execution_status",
-  "tracking_type", "rubin_rot_sky_pos", "rubin_nexp"
+const EXPOSURE_FIELDS = [
+  "exposure_id", "obs_start_mjd", "obs_end_mjd", "band",
+  "physical_filter", "s_ra", "s_dec", "target_name",
+  "science_program", "scheduler_note", "sky_rotation",
+  "can_see_sky", "observation_reason", "group_id"
 ];
 
 function initColumns() {
   const container = document.getElementById('columnsList');
-  container.innerHTML = OBSPLAN_FIELDS.map(col =>
+  container.innerHTML = EXPOSURE_FIELDS.map(col =>
     `<label><input type="checkbox" name="col" value="${col}" checked> ${col}</label>`
   ).join('');
 }
@@ -97,7 +92,7 @@ function selectAllColumns(checked) {
 
 function getSelectedColumns() {
   const checked = document.querySelectorAll('#columnsList input[type="checkbox"]:checked');
-  if (checked.length === 0 || checked.length === OBSPLAN_FIELDS.length) {
+  if (checked.length === 0 || checked.length === EXPOSURE_FIELDS.length) {
     return '';  // All or none = return all columns
   }
   return Array.from(checked).map(cb => cb.value).join(',');
@@ -106,17 +101,13 @@ function getSelectedColumns() {
 function initInputsFromQuery() {
   const params = new URLSearchParams(window.location.search);
 
-  const start = params.get("start");
-  const time = params.get("time");
+  const limit = params.get("limit");
   const format = params.get("format");
   const columns = params.get("columns");
   const predicate = params.get("predicate");
 
-  if (start !== null) {
-    document.getElementById("startInput").value = start;
-  }
-  if (time !== null) {
-    document.getElementById("timeInput").value = time;
+  if (limit !== null) {
+    document.getElementById("limitInput").value = limit;
   }
   if (format !== null) {
     document.getElementById("formatSelect").value = format;
@@ -134,15 +125,13 @@ function initInputsFromQuery() {
 }
 
 function updateUrl() {
-  const start = document.getElementById('startInput').value;
-  const time = document.getElementById('timeInput').value;
+  const limit = document.getElementById('limitInput').value;
   const format = document.getElementById('formatSelect').value;
   const columns = getSelectedColumns();
   const predicate = document.getElementById('predicateInput').value;
 
   const params = new URLSearchParams();
-  if (start && start !== 'now') params.set('start', start);
-  if (time && time !== '12') params.set('time', time);
+  if (limit && limit !== '1000') params.set('limit', limit);
   if (format && format !== 'json') params.set('format', format);
   if (columns) params.set('columns', columns);
   if (predicate) params.set('predicate', predicate);
@@ -151,30 +140,15 @@ function updateUrl() {
   window.history.replaceState({}, '', newUrl);
 }
 
-async function fetchMap() {
-  document.getElementById('status').textContent = "Loading map…";
-  try {
-    const start = encodeURIComponent(document.getElementById('startInput').value);
-    const time = encodeURIComponent(document.getElementById('timeInput').value);
-
-    const url = `/obsloctap/skymap?start=${start}&time=${time}`;
-    window.location.href = url;
-  } catch (e) {
-    document.getElementById('status').textContent = "Error: " + e.message;
-  }
-}
-
 async function fetchData() {
   document.getElementById('status').textContent = "Loading…";
   try {
-    // Get start and time values from input fields
-    const start = encodeURIComponent(document.getElementById('startInput').value);
-    const time = encodeURIComponent(document.getElementById('timeInput').value);
+    const limit = encodeURIComponent(document.getElementById('limitInput').value);
     const format = document.getElementById('formatSelect').value;
     const columns = getSelectedColumns();
     const predicate = document.getElementById('predicateInput').value;
 
-    let url = `/obsloctap/schedule?start=${start}&time=${time}&RESPONSEFORMAT=${format}`;
+    let url = `/obsloctap/exposures?limit=${limit}&RESPONSEFORMAT=${format}`;
     if (columns) {
       url += `&columns=${encodeURIComponent(columns)}`;
     }
@@ -206,12 +180,12 @@ async function fetchData() {
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = downloadUrl;
-      a.download = `schedule.${ext}`;
+      a.download = `exposures.${ext}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(downloadUrl);
-      document.getElementById('status').textContent = `Downloaded schedule.${ext}`;
+      document.getElementById('status').textContent = `Downloaded exposures.${ext}`;
     }
   } catch (e) {
     document.getElementById('status').textContent = "Error: " + e.message;
@@ -230,12 +204,12 @@ function mjdToUTC(mjd) {
 }
 
 function populateFilters() {
-  const statusSet = new Set(data.map(row => row.execution_status));
+  const bandSet = new Set(data.map(row => row.band));
   const targetSet = new Set(data.map(row => row.target_name));
-  const statusFilter = document.getElementById('statusFilter');
+  const bandFilter = document.getElementById('bandFilter');
   const targetFilter = document.getElementById('targetFilter');
-  statusFilter.innerHTML = `<option value="">All</option>` +
-    [...statusSet].map(v => `<option value="${v}">${v}</option>`).join('');
+  bandFilter.innerHTML = `<option value="">All</option>` +
+    [...bandSet].map(v => `<option value="${v}">${v}</option>`).join('');
   targetFilter.innerHTML = `<option value="">All</option>` +
     [...targetSet].map(v => `<option value="${v}">${v}</option>`).join('');
 }
@@ -246,10 +220,10 @@ function renderTable() {
     table.innerHTML = "<tr><td>No data loaded</td></tr>";
     return;
   }
-  const statusFilter = document.getElementById('statusFilter').value;
+  const bandFilter = document.getElementById('bandFilter').value;
   const targetFilter = document.getElementById('targetFilter').value;
   let filtered = data.filter(obj =>
-    (!statusFilter || obj.execution_status === statusFilter) &&
+    (!bandFilter || obj.band === bandFilter) &&
     (!targetFilter || obj.target_name === targetFilter)
   );
   const keys = Object.keys(filtered[0]);
@@ -280,4 +254,3 @@ initInputsFromQuery();
 </script>
 </body>
 </html>
-

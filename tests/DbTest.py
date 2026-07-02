@@ -380,3 +380,23 @@ class TestDB(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError) as ctx:
             validate_predicate("s_ra > 100 AND bad_col < 50")
         self.assertIn("bad_col", str(ctx.exception))
+
+        # Band predicate should be expanded to em_min/em_max
+        result = validate_predicate("band = 'u'")
+        self.assertIn("em_min", result)
+        self.assertIn("em_max", result)
+        self.assertIn("3.3e-07", result)
+        self.assertIn("4e-07", result)
+
+        # Band with other predicates
+        result = validate_predicate(
+            "band = 'r' AND execution_status = 'Performed'"
+        )
+        self.assertIn("em_min", result)
+        self.assertIn("execution_status", result)
+
+        # Multiple bands with OR
+        result = validate_predicate("band = 'u' OR band = 'g'")
+        self.assertIn("em_min", result)
+        # Should have two em_min conditions
+        self.assertEqual(result.count("em_min"), 2)

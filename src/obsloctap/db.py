@@ -86,16 +86,43 @@ def validate_columns(columns: list[str]) -> list[str]:
     return columns
 
 
+def expand_band_predicate(predicate: str) -> str:
+    """Expand band = 'x' predicates to em_min/em_max conditions.
+
+    Converts predicates like "band = 'u'" to the equivalent spectral range
+    condition "(em_min = 3.3e-07 AND em_max = 4e-07)".
+
+    Supports multiple bands with OR: "band = 'u' OR band = 'g'"
+    """
+    # Pattern to match band = 'x' or band='x' (with optional spaces and quotes)
+    pattern = r"band\s*=\s*['\"]?([a-zA-Z~:]+)['\"]?"
+
+    def replace_band(match: re.Match) -> str:
+        band = match.group(1).lower()
+        if band in spectral_ranges:
+            em_min, em_max = spectral_ranges[band]
+            return f"(em_min = {em_min} AND em_max = {em_max})"
+        # If band not found, leave as-is (will fail validation)
+        return match.group(0)
+
+    return re.sub(pattern, replace_band, predicate, flags=re.IGNORECASE)
+
+
 def validate_predicate(predicate: str) -> str:
     """Validate a predicate string and check column names are valid.
 
     Raises ValueError if invalid column names are found.
-    Returns the predicate string if valid.
+    Returns the predicate string (with band expanded) if valid.
+
+    Supports 'band' as a pseudo-column that gets expanded to em_min/em_max.
     """
+    # First expand any band = 'x' predicates
+    expanded = expand_band_predicate(predicate)
+
     # Extract potential column names (words before comparators)
     # Pattern: word followed by optional spaces and a comparator
     pattern = r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|!=|<>|<=|>=|<|>|LIKE)"
-    matches = re.findall(pattern, predicate, re.IGNORECASE)
+    matches = re.findall(pattern, expanded, re.IGNORECASE)
 
     # Filter out SQL keywords and check remaining are valid columns
     sql_keywords = {"AND", "OR", "NOT", "and", "or", "not"}
@@ -105,10 +132,10 @@ def validate_predicate(predicate: str) -> str:
     if invalid:
         raise ValueError(
             f"Invalid column(s) in predicate: {', '.join(invalid)}. "
-            f"Valid columns: {', '.join(OBSPLAN_FIELDS)}"
+            f"Valid columns: {', '.join(OBSPLAN_FIELDS)}, band"
         )
 
-    return predicate
+    return expanded
 
 
 # Configure logging

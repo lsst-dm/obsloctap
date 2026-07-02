@@ -169,6 +169,9 @@ _PLOT_FILTER_JS = _cb(
     " status_select, target_select, filters, renderers);"
 )
 _PDF_LINK_SYNC_JS = _cb("pdfLinkSync(coord_sel, t_gal, t_ecl);")
+_DOWNLOAD_LINK_SYNC_JS = _cb(
+    "downloadLinkSync(band_cb, band_names, status_select, target_select);"
+)
 
 
 # Utility functions
@@ -721,6 +724,21 @@ class ScheduleSkyMap:
         nexp_spinner.js_on_change("value", filter_callback)
         status_select.js_on_change("value", filter_callback)
         target_select.js_on_change("value", filter_callback)
+
+        # Callback to sync download links with filter selections
+        download_link_callback = CustomJS(
+            args={
+                "band_cb": band_cb,
+                "band_names": list(bands_present),
+                "status_select": status_select,
+                "target_select": target_select,
+            },
+            code=_DOWNLOAD_LINK_SYNC_JS,
+        )
+        band_cb.js_on_change("active", download_link_callback)
+        status_select.js_on_change("value", download_link_callback)
+        target_select.js_on_change("value", download_link_callback)
+
         top_row = bk_row(
             children=[band_label, band_cb, spacer, nexp_label, nexp_spinner],
             align="start",

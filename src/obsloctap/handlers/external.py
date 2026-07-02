@@ -16,6 +16,7 @@ import json
 import logging
 from typing import Any, cast
 
+import pandas as pd
 from astropy.io.votable import from_table, writeto
 from astropy.table import Table
 from astropy.time import Time, TimeDelta
@@ -80,8 +81,6 @@ async def get_index(
 @external_router.get(
     "/schedule",
     description="Return the curent observing schedule.",
-    response_model=list[Obsplan],
-    response_model_exclude_none=True,
     summary="Observation Schedule",
 )
 async def get_schedule(
@@ -93,7 +92,8 @@ async def get_schedule(
     RESPONSEFORMAT: str = Query(
         "json",
         description="Response format: json, application/json, "
-        "votable, application/x-votable+xml, text/xml, csv, text/csv",
+        "votable, application/x-votable+xml, text/xml, csv, text/csv, "
+        "parquet, application/x-parquet",
     ),
     columns: str = Query(
         "",
@@ -194,6 +194,16 @@ async def get_schedule(
         astro_table.write(csv_buffer, format="csv")
         return Response(content=csv_buffer.getvalue(), media_type="text/csv")
 
+    elif fmt in ("parquet", "application/x-parquet"):
+        # Convert to Parquet
+        df = pd.DataFrame(data)
+        parquet_buffer = io.BytesIO()
+        df.to_parquet(parquet_buffer, index=False)
+        return Response(
+            content=parquet_buffer.getvalue(),
+            media_type="application/x-parquet",
+        )
+
     else:
         raise HTTPException(
             status_code=415,
@@ -258,15 +268,14 @@ async def get_skymap(
 @external_router.get(
     "/exposures",
     description="Return exposures from ConsDB.",
-    response_model=list[Exposure],
-    response_model_exclude_none=True,
     summary="Exposures",
 )
 async def get_exposures(
     RESPONSEFORMAT: str = Query(
         "json",
         description="Response format: json, application/json, "
-        "votable, application/x-votable+xml, text/xml, csv, text/csv",
+        "votable, application/x-votable+xml, text/xml, csv, text/csv, "
+        "parquet, application/x-parquet",
     ),
     columns: str = Query(
         "",
@@ -341,6 +350,15 @@ async def get_exposures(
         csv_buffer = io.StringIO()
         astro_table.write(csv_buffer, format="csv")
         return Response(content=csv_buffer.getvalue(), media_type="text/csv")
+
+    elif fmt in ("parquet", "application/x-parquet"):
+        df = pd.DataFrame(data)
+        parquet_buffer = io.BytesIO()
+        df.to_parquet(parquet_buffer, index=False)
+        return Response(
+            content=parquet_buffer.getvalue(),
+            media_type="application/x-parquet",
+        )
 
     else:
         raise HTTPException(

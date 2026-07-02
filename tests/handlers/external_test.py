@@ -95,6 +95,15 @@ async def test_get_schedule_responseformat(client: AsyncClient) -> None:
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
 
+    # Parquet
+    response = await client.get(
+        f"{config.path_prefix}/schedule?RESPONSEFORMAT=parquet"
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/x-parquet"
+    # Parquet files start with "PAR1" magic bytes
+    assert response.content[:4] == b"PAR1"
+
     # Unsupported format
     response = await client.get(
         f"{config.path_prefix}/schedule?RESPONSEFORMAT=pdf"

@@ -562,18 +562,21 @@
               <div class="download-bar">
                 <span class="legend-label">Download data:</span>
                 <a class="dl-btn"
-                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;format=json"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;RESPONSEFORMAT=json"
                    download="obsloctap_schedule.json">JSON</a>
                 <a class="dl-btn"
-                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;format=csv"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;RESPONSEFORMAT=csv"
                    download="obsloctap_schedule.csv">CSV</a>
                 <a class="dl-btn"
-                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;format=parquet"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;RESPONSEFORMAT=votable"
+                   download="obsloctap_schedule.xml">VOTable</a>
+                <a class="dl-btn"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;RESPONSEFORMAT=parquet"
                    download="obsloctap_schedule.parquet">Parquet</a>
                 <span class="legend-label">Sky plot:</span>
                 <a class="dl-btn"
                    id="pdf-download-link"
-                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;format=pdf&amp;coordinates=equatorial&amp;galactic_plane=true&amp;ecliptic_plane=true"
+                   href="{{ path_prefix }}/schedule?start={{ start_encoded }}&amp;time={{ time_val }}&amp;RESPONSEFORMAT=pdf&amp;coordinates=equatorial&amp;galactic_plane=true&amp;ecliptic_plane=true"
                    download="obsloctap_schedule.pdf">PDF</a>
               </div>
             </div>

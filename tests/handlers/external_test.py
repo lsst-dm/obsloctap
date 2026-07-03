@@ -158,3 +158,38 @@ async def test_get_schedule_predicate(client: AsyncClient) -> None:
     )
     assert response.status_code == 400
     assert "Invalid column" in response.json()["detail"]
+
+
+def test_parse_start_time() -> None:
+    """Test _parse_start_time helper function."""
+    from astropy.time import Time
+
+    from obsloctap.handlers.external import _parse_start_time
+
+    # "now" returns None
+    assert _parse_start_time("now") is None
+    assert _parse_start_time("NOW") is None
+    assert _parse_start_time("Now") is None
+
+    # "tonight" returns a Time object
+    tonight = _parse_start_time("tonight")
+    assert tonight is not None
+    assert isinstance(tonight, Time)
+
+    # "lastnight" returns a Time object earlier than tonight
+    lastnight = _parse_start_time("lastnight")
+    assert lastnight is not None
+    assert isinstance(lastnight, Time)
+    assert lastnight < tonight
+
+    # ISO format
+    iso_time = _parse_start_time("2026-01-15 12:00:00")
+    assert iso_time is not None
+    assert isinstance(iso_time, Time)
+    assert "2026-01-15" in iso_time.iso
+
+    # MJD format
+    mjd_time = _parse_start_time("60000.5")
+    assert mjd_time is not None
+    assert isinstance(mjd_time, Time)
+    assert abs(mjd_time.mjd - 60000.5) < 0.001

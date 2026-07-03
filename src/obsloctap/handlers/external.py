@@ -16,7 +16,10 @@ import json
 import logging
 from typing import Any, cast
 
+import astropy.units as u
 import pandas as pd
+from astroplan import Observer
+from astropy.coordinates import EarthLocation
 from astropy.io.votable import from_table, writeto
 from astropy.table import Table
 from astropy.time import Time, TimeDelta
@@ -41,6 +44,85 @@ __all__ = ["get_index", "external_router"]
 
 external_router = APIRouter()
 """FastAPI router for all external handlers."""
+
+# Cerro Pachon observer for twilight calculations
+_CERRO_PACHON = Observer(
+    location=EarthLocation(
+        lat=-30.2446 * u.deg,
+        lon=-70.7494 * u.deg,
+        height=2663 * u.m,
+    ),
+    name="Cerro Pachon",
+    timezone="Chile/Continental",
+)
+
+
+def _get_twilight_start(which: str) -> Time:
+    """Get start time based on astronomical twilight at Cerro Pachon.
+
+    Parameters
+    ----------
+    which
+        Either "tonight" or "lastnight"
+
+    Returns
+    -------
+    Time
+        One hour before astronomical twilight evening for the requested night.
+    """
+    now = Time.now()
+
+    if which == "tonight":
+        # Get tonight's evening twilight
+        twilight = _CERRO_PACHON.twilight_evening_astronomical(
+            now, which="next"
+        )
+    else:  # lastnight
+        # Get last night's evening twilight (look back from now)
+        twilight = _CERRO_PACHON.twilight_evening_astronomical(
+            now - TimeDelta(1 * u.day), which="next"
+        )
+
+    # Return one hour before twilight
+    return twilight - TimeDelta(1 * u.hour)
+
+
+def _parse_start_time(start: str) -> Time | None:
+    """Parse start time string into a Time object.
+
+    Parameters
+    ----------
+    start
+        Start time string: 'now', 'tonight', 'lastnight', ISO format, or MJD.
+
+    Returns
+    -------
+    Time | None
+        Time object for the start, or None if 'now' (use current time).
+    """
+    start_lower = start.lower() if start else "now"
+
+    if start_lower == "now":
+        return None
+
+    if start_lower in ("tonight", "lastnight"):
+        return _get_twilight_start(start_lower)
+
+    # Try ISO or MJD format
+    t = Time.now() - TimeDelta("1440min")  # fallback
+    try:
+        t = Time(start, format="iso", scale="utc")
+        return t
+    except Exception:
+        pass
+    try:
+        t = Time(float(start), format="mjd")
+        return t
+    except Exception:
+        pass
+
+    return t
+
 
 # Disable uvicorn logging
 logging.getLogger("uvicorn.access").disabled = True
@@ -86,7 +168,9 @@ async def get_index(
 async def get_schedule(
     start: str = Query(
         "now",
-        description="time to start from 'now' or ISO 'YYYY-MM-DD HH:MM:SS'",
+        description="Start time: 'now', 'tonight', 'lastnight', "
+        "ISO 'YYYY-MM-DD HH:MM:SS', or MJD. "
+        "tonight/lastnight use astronomical twilight at Cerro Pachon.",
     ),
     time: int = Query(24, description="hours[1-48] for schedule lookahead"),
     RESPONSEFORMAT: str = Query(
@@ -128,33 +212,15 @@ async def get_schedule(
             raise HTTPException(status_code=400, detail=str(e))
 
     dbhelp = await DbHelpProvider.getHelper()
-    if start and start.lower() != "now":
-        t = Time.now() - TimeDelta("1440min")
-        success = False
-        try:
-            t = Time(start, format="iso", scale="utc")
-            success = True
-        except Exception:
-            pass
-        try:
-            t = Time(float(start), format="mjd")
-            success = True
-        except Exception:
-            pass
-
-        logger.info(f"Converted time: {success} - Using start time: {t}")
-        result = await dbhelp.get_schedule(
-            time,
-            start=t,
-            columns=requested_cols or None,
-            predicate=validated_predicate,
-        )
-    else:
-        result = await dbhelp.get_schedule(
-            time,
-            columns=requested_cols or None,
-            predicate=validated_predicate,
-        )
+    start_time = _parse_start_time(start)
+    if start_time:
+        logger.info(f"Using start time: {start_time.iso}")
+    result = await dbhelp.get_schedule(
+        time,
+        start=start_time,
+        columns=requested_cols or None,
+        predicate=validated_predicate,
+    )
 
     # Convert to dicts - result is already dicts if columns specified
     if requested_cols:
@@ -219,32 +285,24 @@ async def get_schedule(
     include_in_schema=False,
 )
 async def get_skymap(
-    start: str = Query("now", description="Start time ('now' or ISO/MJD)"),
+    start: str = Query(
+        "tonight",
+        description="Start time: 'now', 'tonight', 'lastnight', "
+        "ISO 'YYYY-MM-DD HH:MM:SS', or MJD. "
+        "tonight/lastnight use astronomical twilight at Cerro Pachon.",
+    ),
     time: int = Query(24, description="Hours of schedule lookahead"),
     logger: BoundLogger = Depends(logger_dependency),
 ) -> HTMLResponse:
     logger.info(f"Skymap requested for time: {time}, start {start}")
     try:
         dbhelp = await DbHelpProvider.getHelper()
-        if start and start.lower() != "now":
-            t = Time.now() - TimeDelta("1440min")
-            success = False
-            try:
-                t = Time(start, format="iso", scale="utc")
-                success = True
-            except Exception:
-                pass
-            try:
-                t = Time(float(start), format="mjd")
-                success = True
-            except Exception:
-                pass
-            logger.info(f"Converted time: {success} - Using start time: {t}")
-            schedule = cast(
-                list[Obsplan], await dbhelp.get_schedule(time, start=t)
-            )
-        else:
-            schedule = cast(list[Obsplan], await dbhelp.get_schedule(time))
+        start_time = _parse_start_time(start)
+        if start_time:
+            logger.info(f"Using start time: {start_time.iso}")
+        schedule = cast(
+            list[Obsplan], await dbhelp.get_schedule(time, start=start_time)
+        )
         html = make_sky_html(
             schedule,
             start_val=start,

@@ -915,6 +915,69 @@ class DbHelp:
             await conn.execution_options(isolation_level="AUTOCOMMIT")
             await conn.execute(text(stmt))
 
+    async def get_recent_obs_ids(self, days: int = 7) -> set[str]:
+        """Get all obs_ids from the last N days.
+
+        Parameters
+        ----------
+        days
+            Number of days to look back (default 7).
+
+        Returns
+        -------
+        set[str]
+            Set of obs_id values from recent obsplan entries.
+        """
+        now = Time.now().utc.to_value("mjd")
+        cutoff = now - days
+        stmt = (
+            f'SELECT obs_id FROM {self.schema}"{Obsplan.__tablename__}" '
+            f"WHERE t_min >= {cutoff}"
+        )
+        rows = await self.exec_fetchall(stmt)
+        return {str(row[0]) for row in rows if row[0]}
+
+    async def backfill_missing_exposures(
+        self, days: int = 7
+    ) -> tuple[int, int]:
+        """Find and insert exposures from ConsDB missing from obsplan.
+
+        Queries obsplan for recent obs_ids, then queries ConsDB for exposures
+        in the same period that are not in obsplan, and inserts them.
+
+        Parameters
+        ----------
+        days
+            Number of days to look back (default 7).
+
+        Returns
+        -------
+        tuple[int, int]
+            Number of exposures (updated, inserted).
+        """
+        from .consdbhelp import ConsDbHelpProvider
+
+        # Get known obs_ids from obsplan
+        known_ids = await self.get_recent_obs_ids(days)
+        log.info(
+            f"Found {len(known_ids)} obs_ids in obsplan for last {days} days"
+        )
+
+        # Get missing exposures from ConsDB
+        consdb = await ConsDbHelpProvider.getHelper()
+        missing = await consdb.get_missing_exposures(known_ids, days)
+
+        if not missing:
+            log.info("No missing exposures to backfill")
+            return 0, 0
+
+        # Use update_insert_exposures to handle both updates and inserts
+        updated, inserted = await self.update_insert_exposures(missing)
+        log.info(
+            f"Backfilled exposures: {updated} updated, {inserted} inserted"
+        )
+        return updated, inserted
+
     async def tidyup(self, t: float) -> None:
         stmt = (
             f'delete from {self.schema}"{Obsplan.__tablename__}"'

@@ -373,7 +373,7 @@ class DbHelp:
         timetol: TimeDelta = min20,
     ) -> Sequence[Row[tuple[Any]]]:
         """Look for matching plan entires based on position and rough time
-        should be Scheduled"""
+        should be Scheduled or Aborted (not already Performed)"""
 
         # Convert TimeDelta to MJD value (in days)
         timetol_mjd = timetol.to_value("jd")
@@ -384,7 +384,7 @@ class DbHelp:
             f"AND ABS(s_dec - {dec}) < {tol} "
             f"AND t_min <= {obs_start_mjd + timetol_mjd} AND "
             f"t_max >= {obs_start_mjd - timetol_mjd} AND "
-            f"execution_status = 'Scheduled' AND "
+            f"execution_status IN ('Scheduled', 'Aborted') AND "
             f"t_planning < {not_after}"
         )
         result = await session.execute(text(stmt))

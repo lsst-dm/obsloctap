@@ -83,3 +83,47 @@ function pdfLinkSync(coord_sel, t_gal, t_ecl) {
     url.searchParams.set('ecliptic_plane', String(t_ecl.active));
     link.href = url.toString();
 }
+
+function downloadLinkSync(band_cb, band_names, status_select, target_select) {
+    // Build predicate from current filter selections
+    const predicates = [];
+
+    // Status filter
+    const selectedStatus = status_select.value;
+    if (selectedStatus && selectedStatus !== 'All') {
+        predicates.push("execution_status = '" + selectedStatus + "'");
+    }
+
+    // Target filter
+    const selectedTarget = target_select.value;
+    if (selectedTarget && selectedTarget !== 'All') {
+        predicates.push("target_name = '" + selectedTarget + "'");
+    }
+
+    // Band filter - server will expand band = 'x' to em_min/em_max
+    const activeBands = band_cb.active.map((index) => band_names[index]);
+    // Only add band predicate if not all bands are selected
+    if (activeBands.length > 0 && activeBands.length < band_names.length) {
+        const bandConditions = activeBands.map((band) => "band = '" + band + "'");
+        if (bandConditions.length === 1) {
+            predicates.push(bandConditions[0]);
+        } else {
+            predicates.push("(" + bandConditions.join(" OR ") + ")");
+        }
+    }
+
+    // Build final predicate string
+    const predicate = predicates.join(" AND ");
+
+    // Update all download links
+    const links = document.querySelectorAll('.dl-btn');
+    links.forEach((link) => {
+        const url = new URL(link.href, window.location.href);
+        if (predicate) {
+            url.searchParams.set('predicate', predicate);
+        } else {
+            url.searchParams.delete('predicate');
+        }
+        link.href = url.toString();
+    });
+}

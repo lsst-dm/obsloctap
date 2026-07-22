@@ -29,13 +29,14 @@
     <span id="status"></span>
   </div>
   <div>
-    <label>Start (MJD or ISO): <input type="string" step="any" id="startInput" value="now"></label>
+    <label>Start (now/tonight/lastnight/MJD/ISO): <input type="string" step="any" id="startInput" value="tonight"></label>
     <label>Time (Hours): <input type="number" step="any" id="timeInput" value="12"></label>
     <label>Format:
       <select id="formatSelect">
         <option value="json">JSON</option>
         <option value="votable">VOTable</option>
         <option value="csv">CSV</option>
+        <option value="parquet">Parquet</option>
       </select>
     </label>
     <button onclick="fetchData()">Fetch</button>
@@ -108,7 +109,7 @@ function initInputsFromQuery() {
 
   const start = params.get("start");
   const time = params.get("time");
-  const format = params.get("format");
+  const format = params.get("RESPONSEFORMAT");
   const columns = params.get("columns");
   const predicate = params.get("predicate");
 
@@ -143,7 +144,7 @@ function updateUrl() {
   const params = new URLSearchParams();
   if (start && start !== 'now') params.set('start', start);
   if (time && time !== '12') params.set('time', time);
-  if (format && format !== 'json') params.set('format', format);
+  if (format && format !== 'json') params.set('RESPONSEFORMAT', format);
   if (columns) params.set('columns', columns);
   if (predicate) params.set('predicate', predicate);
 
@@ -202,7 +203,8 @@ async function fetchData() {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
       const blob = await resp.blob();
-      const ext = format === 'votable' ? 'xml' : 'csv';
+      const extMap = { 'votable': 'xml', 'csv': 'csv', 'parquet': 'parquet' };
+      const ext = extMap[format] || format;
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = downloadUrl;

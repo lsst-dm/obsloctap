@@ -86,16 +86,43 @@ def validate_columns(columns: list[str]) -> list[str]:
     return columns
 
 
+def expand_band_predicate(predicate: str) -> str:
+    """Expand band = 'x' predicates to em_min/em_max conditions.
+
+    Converts predicates like "band = 'u'" to the equivalent spectral range
+    condition "(em_min = 3.3e-07 AND em_max = 4e-07)".
+
+    Supports multiple bands with OR: "band = 'u' OR band = 'g'"
+    """
+    # Pattern to match band = 'x' or band='x' (with optional spaces and quotes)
+    pattern = r"band\s*=\s*['\"]?([a-zA-Z~:]+)['\"]?"
+
+    def replace_band(match: re.Match) -> str:
+        band = match.group(1).lower()
+        if band in spectral_ranges:
+            em_min, em_max = spectral_ranges[band]
+            return f"(em_min = {em_min} AND em_max = {em_max})"
+        # If band not found, leave as-is (will fail validation)
+        return match.group(0)
+
+    return re.sub(pattern, replace_band, predicate, flags=re.IGNORECASE)
+
+
 def validate_predicate(predicate: str) -> str:
     """Validate a predicate string and check column names are valid.
 
     Raises ValueError if invalid column names are found.
-    Returns the predicate string if valid.
+    Returns the predicate string (with band expanded) if valid.
+
+    Supports 'band' as a pseudo-column that gets expanded to em_min/em_max.
     """
+    # First expand any band = 'x' predicates
+    expanded = expand_band_predicate(predicate)
+
     # Extract potential column names (words before comparators)
     # Pattern: word followed by optional spaces and a comparator
     pattern = r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|!=|<>|<=|>=|<|>|LIKE)"
-    matches = re.findall(pattern, predicate, re.IGNORECASE)
+    matches = re.findall(pattern, expanded, re.IGNORECASE)
 
     # Filter out SQL keywords and check remaining are valid columns
     sql_keywords = {"AND", "OR", "NOT", "and", "or", "not"}
@@ -105,10 +132,10 @@ def validate_predicate(predicate: str) -> str:
     if invalid:
         raise ValueError(
             f"Invalid column(s) in predicate: {', '.join(invalid)}. "
-            f"Valid columns: {', '.join(OBSPLAN_FIELDS)}"
+            f"Valid columns: {', '.join(OBSPLAN_FIELDS)}, band"
         )
 
-    return predicate
+    return expanded
 
 
 # Configure logging
@@ -346,7 +373,7 @@ class DbHelp:
         timetol: TimeDelta = min20,
     ) -> Sequence[Row[tuple[Any]]]:
         """Look for matching plan entires based on position and rough time
-        should be Scheduled"""
+        should be Scheduled or Aborted (not already Performed)"""
 
         # Convert TimeDelta to MJD value (in days)
         timetol_mjd = timetol.to_value("jd")
@@ -357,7 +384,7 @@ class DbHelp:
             f"AND ABS(s_dec - {dec}) < {tol} "
             f"AND t_min <= {obs_start_mjd + timetol_mjd} AND "
             f"t_max >= {obs_start_mjd - timetol_mjd} AND "
-            f"execution_status = 'Scheduled' AND "
+            f"execution_status IN ('Scheduled', 'Aborted') AND "
             f"t_planning < {not_after}"
         )
         result = await session.execute(text(stmt))
@@ -887,6 +914,69 @@ class DbHelp:
         async with self.engine.connect() as conn:
             await conn.execution_options(isolation_level="AUTOCOMMIT")
             await conn.execute(text(stmt))
+
+    async def get_recent_obs_ids(self, days: int = 7) -> set[str]:
+        """Get all obs_ids from the last N days.
+
+        Parameters
+        ----------
+        days
+            Number of days to look back (default 7).
+
+        Returns
+        -------
+        set[str]
+            Set of obs_id values from recent obsplan entries.
+        """
+        now = Time.now().utc.to_value("mjd")
+        cutoff = now - days
+        stmt = (
+            f'SELECT obs_id FROM {self.schema}"{Obsplan.__tablename__}" '
+            f"WHERE t_min >= {cutoff}"
+        )
+        rows = await self.exec_fetchall(stmt)
+        return {str(row[0]) for row in rows if row[0]}
+
+    async def backfill_missing_exposures(
+        self, days: int = 7
+    ) -> tuple[int, int]:
+        """Find and insert exposures from ConsDB missing from obsplan.
+
+        Queries obsplan for recent obs_ids, then queries ConsDB for exposures
+        in the same period that are not in obsplan, and inserts them.
+
+        Parameters
+        ----------
+        days
+            Number of days to look back (default 7).
+
+        Returns
+        -------
+        tuple[int, int]
+            Number of exposures (updated, inserted).
+        """
+        from .consdbhelp import ConsDbHelpProvider
+
+        # Get known obs_ids from obsplan
+        known_ids = await self.get_recent_obs_ids(days)
+        log.info(
+            f"Found {len(known_ids)} obs_ids in obsplan for last {days} days"
+        )
+
+        # Get missing exposures from ConsDB
+        consdb = await ConsDbHelpProvider.getHelper()
+        missing = await consdb.get_missing_exposures(known_ids, days)
+
+        if not missing:
+            log.info("No missing exposures to backfill")
+            return 0, 0
+
+        # Use update_insert_exposures to handle both updates and inserts
+        updated, inserted = await self.update_insert_exposures(missing)
+        log.info(
+            f"Backfilled exposures: {updated} updated, {inserted} inserted"
+        )
+        return updated, inserted
 
     async def tidyup(self, t: float) -> None:
         stmt = (

@@ -230,6 +230,62 @@ class ConsDbHelp:
         rows = await self.get_exposure_rows_between(start, end)
         return self.process(rows)
 
+    async def get_missing_exposures(
+        self, known_obs_ids: set[str], days: int = 7
+    ) -> list[Exposure]:
+        """Get exposures from ConsDB that are not in the known obs_ids set.
+
+        Parameters
+        ----------
+        known_obs_ids
+            Set of obs_id values already in obsplan.
+        days
+            Number of days to look back (default 7).
+
+        Returns
+        -------
+        list[Exposure]
+            Exposures that exist in ConsDB but not in obsplan.
+        """
+        from astropy.time import Time
+
+        now = Time.now().utc.to_value("mjd")
+        cutoff = now - days
+
+        # Build NOT IN clause with known exposure_ids
+        not_in_clause = ""
+        if known_obs_ids:
+            # Filter to numeric obs_ids (exposure_ids are integers)
+            numeric_ids = [oid for oid in known_obs_ids if oid.isdigit()]
+            if numeric_ids:
+                id_list = ",".join(numeric_ids)
+                not_in_clause = f"AND exposure_id NOT IN ({id_list}) "
+
+        statement = (
+            f'SELECT {self.fields} FROM {self.schema}"exposure" '
+            f"WHERE obs_start_mjd >= {cutoff} "
+            f"AND can_see_sky = True "
+            f"{not_in_clause}"
+            f"ORDER BY obs_start_mjd ASC"
+        )
+        log.debug(f"Get missing exposures with {statement}")
+
+        rows: Sequence[Row] = []
+        session = self.get_session()
+        try:
+            result = await session.execute(text(statement))
+            rows = result.all()
+        except Exception as e:
+            log.error(f"Failed to get exposures {type(e).__name__} : {e}")
+        finally:
+            await session.close()
+
+        exposures = self.process(rows)
+        log.info(
+            f"Found {len(exposures)} missing exposures in last {days} days"
+        )
+        return exposures
+
     async def get_exposures(
         self,
         columns: list[str] | None = None,

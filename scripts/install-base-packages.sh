@@ -20,14 +20,6 @@ set -x
 # feedback:
 export DEBIAN_FRONTEND=noninteractive
 
-# Debian bullseye is EOL and its packages have moved to archive.debian.org
-# (deb.debian.org still serves stale indexes but 404s on the .deb files).
-# Archived Release files are expired, so skip the Valid-Until check.
-sed -i -e 's|deb.debian.org|archive.debian.org|g' \
-    -e 's|security.debian.org|archive.debian.org|g' \
-    /etc/apt/sources.list
-echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99archive
-
 # Update the package listing, so we know what packages exist:
 apt-get update
 
